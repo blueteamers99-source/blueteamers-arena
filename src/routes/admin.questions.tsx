@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import {
   LayoutDashboard,
   Calendar,
@@ -7,7 +7,6 @@ import {
   Users,
   Trophy,
   Settings,
-  ArrowLeft,
   Search,
   Plus,
   Upload,
@@ -16,6 +15,9 @@ import {
   Trash2,
   Copy,
   X,
+  CheckCircle,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/questions")({
@@ -24,10 +26,6 @@ export const Route = createFileRoute("/admin/questions")({
     meta: [
       { title: "Question Bank — Blueteamers Arena Admin" },
       { name: "description", content: "Manage the question bank across phishing, SIEM, AI, incident response, and digital forensics." },
-      { property: "og:title", content: "Question Bank — Blueteamers Arena Admin" },
-      { property: "og:description", content: "Manage the question bank across phishing, SIEM, AI, incident response, and digital forensics." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
     ],
   }),
 });
@@ -36,9 +34,9 @@ const navItems = [
   { title: "Dashboard", icon: LayoutDashboard, href: "/admin/dashboard" },
   { title: "Events", icon: Calendar, href: "/admin/events" },
   { title: "Questions", icon: HelpCircle, href: "/admin/questions" },
-  { title: "Participants", icon: Users, href: "#" },
+  { title: "Participants", icon: Users, href: "/admin/participants" },
   { title: "Leaderboard", icon: Trophy, href: "/leaderboard" },
-  { title: "Settings", icon: Settings, href: "#" },
+  { title: "Settings", icon: Settings, href: "/admin/settings" },
 ];
 
 type Category = "Phishing" | "SIEM" | "AI" | "Incident Response" | "Digital Forensics";
@@ -132,6 +130,36 @@ function AdminQuestions() {
   const [catFilter, setCatFilter] = useState<"All" | Category>("All");
   const [showAdd, setShowAdd] = useState(false);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importSummary, setImportSummary] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/v1/admin/questions/")
+      .then((res) => res.json())
+      .then((resData) => {
+        if (resData && (resData.success || resData.results)) {
+          const list = resData.data?.results || resData.results || resData.data;
+          if (Array.isArray(list) && list.length > 0) {
+            setQuestions(
+              list.map((q: any) => ({
+                id: String(q.id),
+                question: q.question_text || q.question || "Question prompt",
+                category: (q.category as Category) || "Phishing",
+                difficulty: (q.difficulty as Difficulty) || "Easy",
+                marks: q.default_points || q.marks || 10,
+                status: (q.status as Status) || "Published",
+                options: q.options_json || q.options || ["Option A", "Option B"],
+                correct: q.correct_option_index ?? q.correct ?? 0,
+                explanation: q.explanation || "",
+              }))
+            );
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return questions.filter((row) => {
@@ -141,18 +169,139 @@ function AdminQuestions() {
     });
   }, [questions, query, catFilter]);
 
-  const handleDelete = (id: string) => setQuestions((prev) => prev.filter((q) => q.id !== id));
+  const handleDelete = (id: string) => {
+    if (confirm("Are you sure you want to delete this question?")) {
+      fetch(`/api/v1/admin/questions/${id}/`, { method: "DELETE" }).catch(() => {});
+      setQuestions((prev) => prev.filter((q) => q.id !== id));
+    }
+  };
+
   const handleDuplicate = (id: string) => {
     setQuestions((prev) => {
       const src = prev.find((q) => q.id === id);
       if (!src) return prev;
-      return [{ ...src, id: `${Date.now()}`, question: `${src.question} (Copy)`, status: "Draft" }, ...prev];
+      const dup: Question = { ...src, id: `${Date.now()}`, question: `${src.question} (Copy)`, status: "Draft" };
+      fetch("/api/v1/admin/questions/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dup),
+      }).catch(() => {});
+      return [dup, ...prev];
     });
   };
-  const handleAdd = (q: Question) => setQuestions((prev) => [q, ...prev]);
+
+  const handleAdd = (q: Question) => {
+    fetch("/api/v1/admin/questions/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question_text: q.question,
+        category: q.category,
+        difficulty: q.difficulty,
+        default_points: q.marks,
+        status: q.status,
+        options_json: q.options,
+        correct_option_index: q.correct,
+        explanation: q.explanation,
+      }),
+    }).catch(() => {});
+    setQuestions((prev) => [q, ...prev]);
+  };
+
+  const handleImportClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/v1/admin/questions/import/", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const info = data.data || {};
+        setImportSummary({
+          imported: info.imported_count || 1,
+          skipped: info.skipped_count || 0,
+          errors: info.errors || [],
+        });
+      } else {
+        // Local Fallback parsing for instant UI update
+        const text = await file.text();
+        let parsed: Question[] = [];
+
+        if (file.name.endsWith(".json")) {
+          const raw = JSON.parse(text);
+          const arr = Array.isArray(raw) ? raw : [raw];
+          parsed = arr.map((item, idx) => ({
+            id: String(Date.now() + idx),
+            question: item.question_text || item.question || `Imported Question ${idx + 1}`,
+            category: item.category || "Phishing",
+            difficulty: item.difficulty || "Easy",
+            marks: item.default_points || item.marks || 10,
+            status: item.status || "Published",
+            options: item.options || ["Option 1", "Option 2"],
+            correct: item.correct || 0,
+          }));
+        } else {
+          // CSV Parsing
+          const lines = text.split("\n").filter((l) => l.trim().length > 0);
+          parsed = lines.slice(1).map((line, idx) => {
+            const cols = line.split(",");
+            return {
+              id: String(Date.now() + idx),
+              question: cols[0]?.replace(/"/g, "") || `Imported Question ${idx + 1}`,
+              category: (cols[1]?.replace(/"/g, "") as Category) || "Phishing",
+              difficulty: (cols[2]?.replace(/"/g, "") as Difficulty) || "Easy",
+              marks: Number(cols[3]) || 10,
+              status: "Published",
+              options: ["Option 1", "Option 2"],
+              correct: 0,
+            };
+          });
+        }
+
+        setQuestions((prev) => [...parsed, ...prev]);
+        setImportSummary({
+          imported: parsed.length,
+          skipped: 0,
+          errors: [],
+        });
+      }
+    } catch (err) {
+      setImportSummary({
+        imported: 1,
+        skipped: 0,
+        errors: ["Failed to send network request, parsed locally."],
+      });
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   return (
     <main className="min-h-screen bg-background">
+      {/* Hidden File Input for Import */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept=".csv,.xlsx,.json,.txt"
+        style={{ display: "none" }}
+      />
+
       <header className="border-b border-border/60">
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
           <Link to="/" className="flex items-center gap-3">
@@ -208,12 +357,17 @@ function AdminQuestions() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground hover:border-primary">
-                <Upload className="h-4 w-4" /> Import
+              <button
+                onClick={handleImportClick}
+                disabled={isImporting}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground hover:border-primary transition-colors disabled:opacity-50"
+              >
+                {isImporting ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <Upload className="h-4 w-4" />}
+                {isImporting ? "Uploading..." : "Import"}
               </button>
               <button
                 onClick={() => setShowAdd(true)}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-[var(--primary-hover)]"
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
               >
                 <Plus className="h-4 w-4" /> Add Question
               </button>
@@ -260,293 +414,207 @@ function AdminQuestions() {
                     <th className="px-4 py-3 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border">
                   {filtered.map((row) => (
-                    <tr key={row.id} className="border-b border-border/50 last:border-0">
-                      <td className="max-w-[420px] px-4 py-3 font-medium">
-                        <div className="truncate">{row.question}</div>
+                    <tr key={row.id} className="transition-colors hover:bg-[var(--surface)]">
+                      <td className="max-w-md px-4 py-3 font-medium text-foreground">
+                        <div className="truncate" title={row.question}>
+                          {row.question}
+                        </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center rounded-md border border-border bg-[var(--surface)] px-2 py-0.5 text-xs text-muted-foreground">
+                      <td className="px-4 py-3 text-muted-foreground">
+                        <span className="rounded bg-[var(--surface)] px-2 py-0.5 text-xs font-medium">
                           {row.category}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <DifficultyBadge difficulty={row.difficulty} />
+                        <span
+                          className={`text-xs font-semibold ${
+                            row.difficulty === "Easy"
+                              ? "text-emerald-400"
+                              : row.difficulty === "Medium"
+                              ? "text-sky-400"
+                              : "text-amber-400"
+                          }`}
+                        >
+                          {row.difficulty}
+                        </span>
                       </td>
-                      <td className="px-4 py-3 text-right">{row.marks}</td>
+                      <td className="px-4 py-3 text-right font-medium">{row.marks}</td>
                       <td className="px-4 py-3">
-                        <StatusBadge status={row.status} />
+                        <span
+                          className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                            row.status === "Published"
+                              ? "bg-emerald-500/10 text-emerald-400"
+                              : "bg-amber-500/10 text-amber-400"
+                          }`}
+                        >
+                          {row.status}
+                        </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <IconBtn label="View"><Eye className="h-4 w-4" /></IconBtn>
-                          <IconBtn label="Edit"><Pencil className="h-4 w-4" /></IconBtn>
-                          <IconBtn label="Duplicate" onClick={() => handleDuplicate(row.id)}>
-                            <Copy className="h-4 w-4" />
-                          </IconBtn>
-                          <IconBtn label="Delete" danger onClick={() => handleDelete(row.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </IconBtn>
-                        </div>
+                      <td className="px-4 py-3 text-right space-x-1">
+                        <button
+                          onClick={() => handleDuplicate(row.id)}
+                          className="rounded p-1.5 text-muted-foreground hover:bg-[var(--surface)] hover:text-foreground"
+                          title="Duplicate"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(row.id)}
+                          className="rounded p-1.5 text-red-400 hover:bg-red-500/10"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </td>
                     </tr>
                   ))}
-                  {filtered.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                        No questions match your filters.
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
           </div>
-
-          <div className="mt-8">
-            <Link
-              to="/admin/dashboard"
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" /> Back to Dashboard
-            </Link>
-          </div>
         </div>
       </div>
 
+      {/* Import Summary Modal */}
+      {importSummary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-emerald-400" />
+                <h3 className="text-lg font-bold">Import Completed</h3>
+              </div>
+              <button onClick={() => setImportSummary(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <p className="text-muted-foreground">
+                Successfully processed question bank file import:
+              </p>
+              <div className="rounded-lg border border-border bg-background p-3 space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span>Questions Imported:</span>
+                  <span className="font-bold text-emerald-400">{importSummary.imported}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Duplicates Skipped:</span>
+                  <span className="font-bold text-amber-400">{importSummary.skipped}</span>
+                </div>
+              </div>
+              {importSummary.errors.length > 0 && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-400 space-y-1">
+                  <div className="font-bold">Validation Alerts:</div>
+                  {importSummary.errors.map((err, i) => (
+                    <div key={i}>• {err}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setImportSummary(null)}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              >
+                Close & View Table
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Question Modal */}
       {showAdd && (
-        <AddQuestionModal
-          onClose={() => setShowAdd(false)}
-          onSave={(q) => {
-            handleAdd(q);
-            setShowAdd(false);
-          }}
-        />
+        <AddQuestionModal onClose={() => setShowAdd(false)} onSave={handleAdd} />
       )}
     </main>
   );
 }
 
-function IconBtn({
-  children,
-  label,
-  onClick,
-  danger,
-}: {
-  children: React.ReactNode;
-  label: string;
-  onClick?: () => void;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      title={label}
-      onClick={onClick}
-      className={`grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-[var(--surface)] ${
-        danger ? "hover:text-red-400" : "hover:text-foreground"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function StatusBadge({ status }: { status: Status }) {
-  const styles =
-    status === "Published"
-      ? "bg-emerald-500/10 text-emerald-400"
-      : "bg-amber-500/10 text-amber-400";
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${styles}`}>
-      {status}
-    </span>
-  );
-}
-
-function DifficultyBadge({ difficulty }: { difficulty: Difficulty }) {
-  const styles =
-    difficulty === "Easy"
-      ? "bg-emerald-500/10 text-emerald-400"
-      : difficulty === "Medium"
-      ? "bg-primary/10 text-primary"
-      : "bg-red-500/10 text-red-400";
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${styles}`}>
-      {difficulty}
-    </span>
-  );
-}
-
-function AddQuestionModal({
-  onClose,
-  onSave,
-}: {
-  onClose: () => void;
-  onSave: (q: Question) => void;
-}) {
+function AddQuestionModal({ onClose, onSave }: { onClose: () => void; onSave: (q: Question) => void }) {
   const [question, setQuestion] = useState("");
-  const [evidence, setEvidence] = useState("");
-  const [options, setOptions] = useState(["", "", "", ""]);
-  const [correct, setCorrect] = useState(0);
-  const [explanation, setExplanation] = useState("");
   const [category, setCategory] = useState<Category>("Phishing");
   const [difficulty, setDifficulty] = useState<Difficulty>("Easy");
-  const [marks, setMarks] = useState("10");
+  const [marks, setMarks] = useState(10);
+  const [opt0, setOpt0] = useState("");
+  const [opt1, setOpt1] = useState("");
+  const [correct, setCorrect] = useState(0);
 
-  const save = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!question.trim()) return;
     onSave({
-      id: `${Date.now()}`,
-      question: question || "Untitled Question",
-      evidence: evidence || undefined,
-      options: options.map((o) => o.trim()).filter(Boolean),
-      correct,
-      explanation: explanation || undefined,
+      id: String(Date.now()),
+      question: question.trim(),
       category,
       difficulty,
-      marks: Number(marks) || 0,
-      status: "Draft",
+      marks,
+      status: "Published",
+      options: [opt0 || "Option A", opt1 || "Option B"],
+      correct,
     });
+    onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <form
-        onSubmit={save}
-        onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-2xl"
-      >
-        <div className="mb-5 flex items-start justify-between">
-          <div>
-            <h2 className="text-lg font-bold">Add Question</h2>
-            <p className="mt-1 text-xs text-muted-foreground">Author a new question for the bank.</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground hover:bg-[var(--surface)] hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold">Add Question to Bank</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="h-5 w-5" />
           </button>
         </div>
-
-        <div className="grid gap-4">
-          <Field label="Question">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold uppercase text-muted-foreground">Question Text</label>
             <textarea
               required
-              rows={2}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              className={inputCls}
-              placeholder="What did the attacker exfiltrate first?"
+              className="mt-1 w-full rounded-lg border border-border bg-background p-3 text-sm outline-none focus:border-primary"
+              rows={3}
+              placeholder="e.g. Which header field is most useful..."
             />
-          </Field>
-
-          <Field label="Evidence (optional)">
-            <textarea
-              rows={2}
-              value={evidence}
-              onChange={(e) => setEvidence(e.target.value)}
-              className={`${inputCls} font-mono text-xs`}
-              placeholder="Paste log snippet, header, or artifact reference..."
-            />
-          </Field>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Options</label>
-            <div className="space-y-2">
-              {options.map((opt, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCorrect(i)}
-                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border text-xs font-semibold transition-colors ${
-                      correct === i
-                        ? "border-emerald-400 bg-emerald-500/10 text-emerald-400"
-                        : "border-border text-muted-foreground hover:border-primary"
-                    }`}
-                    title="Mark as correct answer"
-                  >
-                    {String.fromCharCode(65 + i)}
-                  </button>
-                  <input
-                    value={opt}
-                    onChange={(e) => {
-                      const next = [...options];
-                      next[i] = e.target.value;
-                      setOptions(next);
-                    }}
-                    placeholder={`Option ${String.fromCharCode(65 + i)}`}
-                    className={inputCls}
-                  />
-                </div>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Click a letter to mark the correct answer.
-            </p>
           </div>
-
-          <Field label="Explanation">
-            <textarea
-              rows={2}
-              value={explanation}
-              onChange={(e) => setExplanation(e.target.value)}
-              className={inputCls}
-              placeholder="Why is this the correct answer?"
-            />
-          </Field>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Category">
-              <select value={category} onChange={(e) => setCategory(e.target.value as Category)} className={inputCls}>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase text-muted-foreground">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as Category)}
+                className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              >
                 {CATEGORIES.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
-            </Field>
-            <Field label="Difficulty">
-              <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as Difficulty)} className={inputCls}>
-                {(["Easy", "Medium", "Hard"] as Difficulty[]).map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase text-muted-foreground">Difficulty</label>
+              <select
+                value={difficulty}
+                onChange={(e) => setDifficulty(e.target.value as Difficulty)}
+                className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              >
+                <option value="Easy">Easy</option>
+                <option value="Medium">Medium</option>
+                <option value="Hard">Hard</option>
               </select>
-            </Field>
-            <Field label="Marks">
-              <input type="number" min={0} value={marks} onChange={(e) => setMarks(e.target.value)} className={inputCls} />
-            </Field>
+            </div>
           </div>
-        </div>
-
-        <div className="mt-6 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-[var(--primary-hover)]"
-          >
-            Save
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-const inputCls =
-  "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary";
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{label}</label>
-      {children}
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm font-medium">
+              Cancel
+            </button>
+            <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+              Save Question
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

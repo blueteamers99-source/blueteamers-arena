@@ -10,9 +10,13 @@ from apps.accounts.viewsets.auth_viewsets import (
 )
 from apps.accounts.viewsets.user_viewsets import UserProfileView
 from apps.accounts.viewsets.admin_platform_viewset import AdminPlatformViewSet
+from apps.questions.viewsets.question_viewset import QuestionViewSet
+from apps.participants.viewsets.participant_viewset import ParticipantViewSet
 
 router = DefaultRouter()
 router.register(r"admin", AdminPlatformViewSet, basename="admin-platform")
+router.register(r"admin/questions", QuestionViewSet, basename="admin-questions")
+router.register(r"admin/participants", ParticipantViewSet, basename="admin-participants")
 
 urlpatterns = [
     path("auth/login/", LoginView.as_view(), name="auth-login"),

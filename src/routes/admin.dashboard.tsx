@@ -27,9 +27,9 @@ const navItems = [
   { title: "Dashboard", icon: LayoutDashboard, href: "/admin/dashboard" },
   { title: "Events", icon: Calendar, href: "/admin/events" },
   { title: "Questions", icon: HelpCircle, href: "/admin/questions" },
-  { title: "Participants", icon: Users, href: "#" },
+  { title: "Participants", icon: Users, href: "/admin/participants" },
   { title: "Leaderboard", icon: Trophy, href: "/leaderboard" },
-  { title: "Settings", icon: Settings, href: "#" },
+  { title: "Settings", icon: Settings, href: "/admin/settings" },
 ];
 
 const stats = [

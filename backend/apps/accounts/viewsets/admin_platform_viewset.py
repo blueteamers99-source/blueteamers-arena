@@ -1,8 +1,9 @@
 from django.http import HttpResponse
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from drf_spectacular.utils import extend_schema
-from apps.common.utils.response import success_response
+from apps.common.utils.response import success_response, error_response
 from apps.accounts.permissions.is_admin import IsAdmin
 from apps.accounts.services.admin_analytics_service import AdminAnalyticsService
 from apps.accounts.services.report_service import ReportService
@@ -14,6 +15,7 @@ from apps.accounts.serializers.admin_platform_serializer import (
 
 class AdminPlatformViewSet(viewsets.ViewSet):
     permission_classes = [IsAdmin]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     @extend_schema(responses={200: dict})
     @action(detail=False, methods=["get"], url_path="dashboard")
@@ -37,14 +39,41 @@ class AdminPlatformViewSet(viewsets.ViewSet):
     @extend_schema(request=BulkImportQuestionsSerializer)
     @action(detail=False, methods=["post"], url_path="questions/bulk-import")
     def bulk_import_questions(self, request):
+        if "questions" in request.data and isinstance(request.data["questions"], list):
+            res = ReportService.import_questions_json(request.data["questions"])
+            return success_response(
+                data=res,
+                message=f"Successfully processed {res['imported_count']} question bank items.",
+                status_code=status.HTTP_201_CREATED,
+            )
         serializer = BulkImportQuestionsSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        count = ReportService.import_questions_json(serializer.validated_data["questions"])
+        res = ReportService.import_questions_json(serializer.validated_data["questions"])
         return success_response(
-            data={"imported_count": count},
-            message=f"Successfully imported {count} question bank items.",
+            data=res,
+            message=f"Successfully imported {res['imported_count']} question bank items.",
             status_code=status.HTTP_201_CREATED,
         )
+
+    @extend_schema(summary="File Import Questions (.csv, .xlsx, .json)")
+    @action(detail=False, methods=["post"], url_path="questions/import", parser_classes=[MultiPartParser, FormParser, JSONParser])
+    def file_import_questions(self, request):
+        file_obj = request.FILES.get("file")
+        if file_obj:
+            res = ReportService.import_questions_file(file_obj)
+            return success_response(
+                data=res,
+                message=f"Imported {res['imported_count']} questions, skipped {res['skipped_count']} duplicates.",
+                status_code=status.HTTP_201_CREATED,
+            )
+        elif "questions" in request.data:
+            res = ReportService.import_questions_json(request.data["questions"])
+            return success_response(
+                data=res,
+                message=f"Imported {res['imported_count']} questions.",
+                status_code=status.HTTP_201_CREATED,
+            )
+        return error_response(message="No file or questions list provided in payload.", status_code=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(responses={200: list})
     @action(detail=False, methods=["get"], url_path="questions/bulk-export")
