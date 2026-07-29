@@ -16,8 +16,12 @@ import { Route as ChallengesRouteImport } from './routes/challenges'
 import { Route as CompetitionCompleteRouteImport } from './routes/competition-complete'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as EventRouteImport } from './routes/event'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ReviewRouteImport } from './routes/review'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudentRouteImport } from './routes/student'
 import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminEventsRouteImport } from './routes/admin.events'
@@ -62,14 +66,34 @@ const EventRoute = EventRouteImport.update({
   path: '/event',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LeaderboardRoute = LeaderboardRouteImport.update({
   id: '/leaderboard',
   path: '/leaderboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReviewRoute = ReviewRouteImport.update({
   id: '/review',
   path: '/review',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StudentRoute = StudentRouteImport.update({
@@ -121,8 +145,12 @@ export interface FileRoutesByFullPath {
   '/competition-complete': typeof CompetitionCompleteRoute
   '/dashboard': typeof DashboardRoute
   '/event': typeof EventRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/review': typeof ReviewRoute
+  '/signup': typeof SignupRoute
   '/student': typeof StudentRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/events': typeof AdminEventsRoute
@@ -140,8 +168,12 @@ export interface FileRoutesByTo {
   '/competition-complete': typeof CompetitionCompleteRoute
   '/dashboard': typeof DashboardRoute
   '/event': typeof EventRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/review': typeof ReviewRoute
+  '/signup': typeof SignupRoute
   '/student': typeof StudentRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/events': typeof AdminEventsRoute
@@ -160,8 +192,12 @@ export interface FileRoutesById {
   '/competition-complete': typeof CompetitionCompleteRoute
   '/dashboard': typeof DashboardRoute
   '/event': typeof EventRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/review': typeof ReviewRoute
+  '/signup': typeof SignupRoute
   '/student': typeof StudentRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/events': typeof AdminEventsRoute
@@ -181,8 +217,12 @@ export interface FileRouteTypes {
     | '/competition-complete'
     | '/dashboard'
     | '/event'
+    | '/forgot-password'
     | '/leaderboard'
+    | '/login'
+    | '/reset-password'
     | '/review'
+    | '/signup'
     | '/student'
     | '/admin/dashboard'
     | '/admin/events'
@@ -200,8 +240,12 @@ export interface FileRouteTypes {
     | '/competition-complete'
     | '/dashboard'
     | '/event'
+    | '/forgot-password'
     | '/leaderboard'
+    | '/login'
+    | '/reset-password'
     | '/review'
+    | '/signup'
     | '/student'
     | '/admin/dashboard'
     | '/admin/events'
@@ -219,8 +263,12 @@ export interface FileRouteTypes {
     | '/competition-complete'
     | '/dashboard'
     | '/event'
+    | '/forgot-password'
     | '/leaderboard'
+    | '/login'
+    | '/reset-password'
     | '/review'
+    | '/signup'
     | '/student'
     | '/admin/dashboard'
     | '/admin/events'
@@ -239,8 +287,12 @@ export interface RootRouteChildren {
   CompetitionCompleteRoute: typeof CompetitionCompleteRoute
   DashboardRoute: typeof DashboardRoute
   EventRoute: typeof EventRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   LeaderboardRoute: typeof LeaderboardRoute
+  LoginRoute: typeof LoginRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   ReviewRoute: typeof ReviewRoute
+  SignupRoute: typeof SignupRoute
   StudentRoute: typeof StudentRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   AdminEventsRoute: typeof AdminEventsRoute
@@ -302,6 +354,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EventRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/leaderboard': {
       id: '/leaderboard'
       path: '/leaderboard'
@@ -309,11 +368,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LeaderboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/review': {
       id: '/review'
       path: '/review'
       fullPath: '/review'
       preLoaderRoute: typeof ReviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/student': {
@@ -383,8 +463,12 @@ const rootRouteChildren: RootRouteChildren = {
   CompetitionCompleteRoute: CompetitionCompleteRoute,
   DashboardRoute: DashboardRoute,
   EventRoute: EventRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   LeaderboardRoute: LeaderboardRoute,
+  LoginRoute: LoginRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   ReviewRoute: ReviewRoute,
+  SignupRoute: SignupRoute,
   StudentRoute: StudentRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   AdminEventsRoute: AdminEventsRoute,
