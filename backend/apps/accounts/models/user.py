@@ -5,13 +5,14 @@ from django.db import models
 
 class UserManager(BaseUserManager):
     """
-    Custom user manager for User model with email as unique identifier.
+    Custom user manager for User model with email or username as identifier.
     """
     def create_user(self, email, password=None, **extra_fields):
         if not email:
             raise ValueError("The Email field must be set")
         email = self.normalize_email(email)
-        extra_fields.setdefault("username", email)
+        if not extra_fields.get("username"):
+            extra_fields["username"] = email.split("@")[0]
         user = self.model(email=email, **extra_fields)
         if password:
             user.set_password(password)
@@ -36,41 +37,42 @@ class UserManager(BaseUserManager):
 class User(AbstractUser):
     """
     Custom User Model for Blueteamers Arena platform.
-    Inherits from AbstractUser with UUID primary key.
+    Supports STUDENT, ADMIN, and SUPER_ADMIN roles.
     """
     class RoleChoices(models.TextChoices):
         SUPER_ADMIN = "SUPER_ADMIN", "Super Admin"
         ADMIN = "ADMIN", "Admin"
+        STUDENT = "STUDENT", "Student"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True, db_index=True)
+    username = models.CharField(max_length=150, unique=True, db_index=True)
+    full_name = models.CharField(max_length=255, blank=True, default="")
     role = models.CharField(
         max_length=20,
         choices=RoleChoices.choices,
-        default=RoleChoices.ADMIN,
+        default=RoleChoices.STUDENT,
         db_index=True,
     )
+    college = models.CharField(max_length=255, blank=True, default="")
+    department = models.CharField(max_length=255, blank=True, default="")
     phone_number = models.CharField(max_length=20, blank=True, null=True)
+    is_email_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     objects = UserManager()
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["first_name", "last_name"]
+    REQUIRED_FIELDS = ["username", "first_name", "last_name"]
 
     class Meta:
         verbose_name = "User"
         verbose_name_plural = "Users"
         ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["email"]),
-            models.Index(fields=["role"]),
-            models.Index(fields=["created_at"]),
-        ]
 
     def __str__(self):
-        return f"{self.email} ({self.get_role_display()})"
+        return f"{self.email} ({self.role})"
 
     @property
     def is_admin_role(self) -> bool:
@@ -79,3 +81,7 @@ class User(AbstractUser):
     @property
     def is_super_admin_role(self) -> bool:
         return self.role == self.RoleChoices.SUPER_ADMIN or self.is_superuser
+
+    @property
+    def is_student_role(self) -> bool:
+        return self.role == self.RoleChoices.STUDENT

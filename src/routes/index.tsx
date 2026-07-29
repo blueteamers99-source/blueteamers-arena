@@ -23,7 +23,6 @@ const navLinks = [
   { label: "Dashboard", to: "/dashboard" as const },
   { label: "Challenges", to: "/challenges" as const },
   { label: "Leaderboard", to: "/leaderboard" as const },
-  { label: "Events", to: "/admin/events" as const },
   { label: "About Us", to: "/about" as const },
 ];
 
@@ -83,7 +82,7 @@ function PrimaryButton({
   const navigate = useNavigate();
   return (
     <button
-      onClick={onClick ?? (() => navigate({ to: "/arena" }))}
+      onClick={onClick ?? (() => navigate({ to: "/login" }))}
       className={`inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-[var(--primary-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${className}`}
     >
       {children}
@@ -133,7 +132,7 @@ function Nav() {
         </ul>
         <div className="flex items-center gap-4">
           <Link
-            to="/admin/login"
+            to="/login"
             className="hidden text-sm font-medium text-foreground transition-colors hover:text-muted-foreground sm:inline"
           >
             Log in
