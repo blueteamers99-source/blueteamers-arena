@@ -37,13 +37,13 @@ const navItems = [
   { title: "Events", icon: Calendar, href: "/admin/events" },
   { title: "Questions", icon: HelpCircle, href: "/admin/questions" },
   { title: "Participants", icon: Users, href: "/admin/participants" },
-  { title: "Leaderboard", icon: Trophy, href: "/leaderboard" },
+  { title: "Leaderboard", icon: Trophy, href: "/admin/dashboard?tab=leaderboard" },
   { title: "Settings", icon: Settings, href: "/admin/settings" },
 ];
 
-type EventStatus = "Live" | "Upcoming" | "Completed";
+export type EventStatus = "Live" | "Upcoming" | "Completed";
 
-type EventRow = {
+export type EventRow = {
   id: string;
   name: string;
   college: string;
@@ -53,7 +53,7 @@ type EventRow = {
   date: string;
 };
 
-const seedEvents: EventRow[] = [
+export const seedEvents: EventRow[] = [
   { id: "1", name: "CBIT AI with SOC", college: "CBIT", code: "CBIT-AI-2026", participants: 84, status: "Live", date: "22 Jul 2026" },
   { id: "2", name: "VNR Cyber Workshop", college: "VNR", code: "VNR-CY-2026", participants: 62, status: "Completed", date: "20 Jul 2026" },
   { id: "3", name: "MGIT Blue Team Bootcamp", college: "MGIT", code: "MGIT-BT-2026", participants: 48, status: "Upcoming", date: "28 Jul 2026" },

@@ -19,6 +19,7 @@ import { Route as EventRouteImport } from './routes/event'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as ReviewRouteImport } from './routes/review'
 import { Route as StudentRouteImport } from './routes/student'
+import { Route as StueventsRouteImport } from './routes/stuevents'
 import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminEventsRouteImport } from './routes/admin.events'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
@@ -77,6 +78,11 @@ const StudentRoute = StudentRouteImport.update({
   path: '/student',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StueventsRoute = StueventsRouteImport.update({
+  id: '/stuevents',
+  path: '/stuevents',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminDashboardRoute = AdminDashboardRouteImport.update({
   id: '/admin/dashboard',
   path: '/admin/dashboard',
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/leaderboard': typeof LeaderboardRoute
   '/review': typeof ReviewRoute
   '/student': typeof StudentRoute
+  '/stuevents': typeof StueventsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/events': typeof AdminEventsRoute
   '/admin/login': typeof AdminLoginRoute
@@ -143,6 +150,7 @@ export interface FileRoutesByTo {
   '/leaderboard': typeof LeaderboardRoute
   '/review': typeof ReviewRoute
   '/student': typeof StudentRoute
+  '/stuevents': typeof StueventsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/events': typeof AdminEventsRoute
   '/admin/login': typeof AdminLoginRoute
@@ -163,6 +171,7 @@ export interface FileRoutesById {
   '/leaderboard': typeof LeaderboardRoute
   '/review': typeof ReviewRoute
   '/student': typeof StudentRoute
+  '/stuevents': typeof StueventsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/events': typeof AdminEventsRoute
   '/admin/login': typeof AdminLoginRoute
@@ -184,6 +193,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/review'
     | '/student'
+    | '/stuevents'
     | '/admin/dashboard'
     | '/admin/events'
     | '/admin/login'
@@ -203,6 +213,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/review'
     | '/student'
+    | '/stuevents'
     | '/admin/dashboard'
     | '/admin/events'
     | '/admin/login'
@@ -222,6 +233,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/review'
     | '/student'
+    | '/stuevents'
     | '/admin/dashboard'
     | '/admin/events'
     | '/admin/login'
@@ -242,6 +254,7 @@ export interface RootRouteChildren {
   LeaderboardRoute: typeof LeaderboardRoute
   ReviewRoute: typeof ReviewRoute
   StudentRoute: typeof StudentRoute
+  StueventsRoute: typeof StueventsRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   AdminEventsRoute: typeof AdminEventsRoute
   AdminLoginRoute: typeof AdminLoginRoute
@@ -323,6 +336,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudentRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stuevents': {
+      id: '/stuevents'
+      path: '/stuevents'
+      fullPath: '/stuevents'
+      preLoaderRoute: typeof StueventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/dashboard': {
       id: '/admin/dashboard'
       path: '/admin/dashboard'
@@ -386,6 +406,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeaderboardRoute: LeaderboardRoute,
   ReviewRoute: ReviewRoute,
   StudentRoute: StudentRoute,
+  StueventsRoute: StueventsRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   AdminEventsRoute: AdminEventsRoute,
   AdminLoginRoute: AdminLoginRoute,

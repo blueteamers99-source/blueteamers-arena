@@ -23,7 +23,9 @@ import {
   PlayCircle,
   Crown,
   FileText,
+  Calendar,
 } from "lucide-react";
+import StuEvents from "./stuevents";
 import {
   ACCENT_CLASSES,
   getSelectedEvent,
@@ -56,6 +58,7 @@ export const Route = createFileRoute("/dashboard")({
 
 const sidebarItems = [
   { id: "Dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "Events", label: "Events", icon: Calendar },
   { id: "Challenges", label: "Challenges", icon: Target },
   { id: "Leaderboard", label: "Leaderboard", icon: Trophy },
   { id: "Rules", label: "Rules", icon: BookOpen, isAction: true },
@@ -264,6 +267,9 @@ function Dashboard() {
             </div>
           </div>
         </header>
+
+        {/* Tab: Events */}
+        {activeTab === "Events" && <StuEvents />}
 
         {/* Tab 1: Dashboard Overview */}
         {activeTab === "Dashboard" && (
