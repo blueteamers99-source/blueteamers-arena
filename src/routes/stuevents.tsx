@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { ACCENT_CLASSES, getSelectedEvent, type MockEvent } from "@/lib/mock-events";
 import { seedEvents, type EventRow, type EventStatus } from "./admin.events";
+import { Navbar } from "@/components/Navbar";
 
 export const Route = createFileRoute("/stuevents")({
   component: StuEvents,
@@ -69,6 +70,8 @@ export default function StuEvents() {
 
   return (
     <div className="relative min-h-screen bg-background text-foreground overflow-hidden">
+      <Navbar />
+
       {/* Background Glow Overlay */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(14,165,233,0.12),rgba(255,255,255,0))]" />
 
@@ -261,7 +264,7 @@ function DetailsModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-border/80 bg-card p-6 shadow-2xl shadow-black/90 transition-all transform animate-in zoom-in-95 duration-200"
+        className="w-full max-w-[540px] rounded-2xl border border-border/80 bg-card p-6 sm:p-7 shadow-2xl shadow-black/90 transition-all transform animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}

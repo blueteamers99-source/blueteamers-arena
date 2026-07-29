@@ -107,10 +107,6 @@ function StudentLogin() {
 
   return (
     <main className="min-h-screen bg-background relative flex items-center justify-center p-4 overflow-hidden">
-      {/* Background Animated Glow Elements */}
-      <div className="absolute -top-40 -left-40 h-96 w-96 rounded-full bg-primary/20 blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-sky-500/20 blur-3xl pointer-events-none" />
-
       {/* Main Glassmorphism Container */}
       <div className="w-full max-w-md space-y-6 relative z-10">
         <div className="text-center space-y-2">
@@ -119,7 +115,7 @@ function StudentLogin() {
               <span className="text-2xl font-bold text-primary">B</span>
             </div>
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight">Student Cyber Arena</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Blueteamers Arena</h1>
           <p className="text-sm text-muted-foreground">
             Sign in to access CTF investigation challenges and track live rankings.
           </p>

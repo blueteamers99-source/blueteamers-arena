@@ -33,6 +33,8 @@ import {
   type ProgressMap,
 } from "@/lib/mock-challenges";
 
+import { Navbar } from "@/components/Navbar";
+
 export const Route = createFileRoute("/challenges")({
   component: ChallengesPage,
   head: () => ({
@@ -83,32 +85,10 @@ function ChallengesPage() {
 
   return (
     <main className="relative min-h-screen bg-background text-foreground overflow-hidden">
+      <Navbar />
+
       {/* Background Glow Overlay */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(14,165,233,0.12),rgba(255,255,255,0))]" />
-
-      {/* Top Header Navigation Bar */}
-      <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-md px-6 py-4">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Link
-              to="/dashboard"
-              className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:border-primary/50 hover:bg-card/80 hover:text-foreground shadow-sm"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
-            </Link>
-            <Link
-              to="/"
-              className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:border-primary/50 hover:bg-card/80 hover:text-foreground shadow-sm"
-            >
-              <Home className="h-3.5 w-3.5" /> Back to Home
-            </Link>
-          </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card px-3.5 py-1 text-xs font-medium text-muted-foreground shadow-sm">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>{ev.college} • {ev.workshop}</span>
-          </div>
-        </div>
-      </header>
 
       {/* Content Container */}
       <div className="relative z-10 mx-auto max-w-7xl px-6 py-8 space-y-8">

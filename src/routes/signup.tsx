@@ -113,10 +113,6 @@ function StudentSignup() {
 
   return (
     <main className="min-h-screen bg-background relative flex items-center justify-center p-4 py-12 overflow-hidden">
-      {/* Background Animated Glow Elements */}
-      <div className="absolute -top-40 -right-40 h-96 w-96 rounded-full bg-primary/20 blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-40 -left-40 h-96 w-96 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none" />
-
       <div className="w-full max-w-xl space-y-6 relative z-10">
         <div className="text-center space-y-2">
           <Link to="/" className="inline-flex items-center gap-3">
@@ -124,7 +120,7 @@ function StudentSignup() {
               <span className="text-2xl font-bold text-primary">B</span>
             </div>
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight">Create Student Account</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Create Account</h1>
           <p className="text-sm text-muted-foreground">
             Join thousands of student defenders participating in SOC CTF challenges.
           </p>

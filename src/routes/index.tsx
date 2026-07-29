@@ -15,16 +15,11 @@ import {
 } from "lucide-react";
 import heroCyberImage from "@/assets/hero-cyber.jpg";
 
+import { Navbar } from "@/components/Navbar";
+
 export const Route = createFileRoute("/")({
   component: Landing,
 });
-
-const navLinks = [
-  { label: "Dashboard", to: "/dashboard" as const },
-  { label: "Challenges", to: "/challenges" as const },
-  { label: "Leaderboard", to: "/leaderboard" as const },
-  { label: "About Us", to: "/about" as const },
-];
 
 const features = [
   {
@@ -110,39 +105,7 @@ function GhostButton({
   );
 }
 
-function Nav() {
-  return (
-    <header className="border-b border-border/60">
-      <nav className="mx-auto flex max-w-[1400px] items-center justify-between gap-6 px-6 py-5">
-        <Link to="/" className="transition-opacity hover:opacity-80">
-          <Logo />
-        </Link>
-        <ul className="hidden items-center gap-10 md:flex">
-          {navLinks.map((l) => (
-            <li key={l.label}>
-              <Link
-                to={l.to}
-                className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                activeProps={{ className: "text-sm font-medium text-primary font-semibold" }}
-              >
-                {l.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-        <div className="flex items-center gap-4">
-          <Link
-            to="/login"
-            className="hidden text-sm font-medium text-foreground transition-colors hover:text-muted-foreground sm:inline"
-          >
-            Log in
-          </Link>
-          <PrimaryButton>Enter Arena</PrimaryButton>
-        </div>
-      </nav>
-    </header>
-  );
-}
+
 
 function AppPreview() {
   return (
@@ -263,7 +226,7 @@ function Footer() {
 function Landing() {
   return (
     <main className="min-h-screen bg-background">
-      <Nav />
+      <Navbar />
       <Hero />
       <Features />
       <Categories />

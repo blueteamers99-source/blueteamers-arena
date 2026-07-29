@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Shield, Target, Users, Zap, Linkedin, Instagram, Youtube } from "lucide-react";
 
+import { Navbar } from "@/components/Navbar";
+
 export const Route = createFileRoute("/about")({
     head: () => ({
         meta: [
@@ -14,28 +16,6 @@ export const Route = createFileRoute("/about")({
     }),
     component: AboutPage,
 });
-
-function Logo() {
-    return (
-        <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-border bg-card">
-                <span className="text-lg font-bold text-primary">B</span>
-            </div>
-            <div className="leading-tight">
-                <div className="text-sm font-bold tracking-wide">BLUETEAMERS</div>
-                <div className="text-xs font-semibold tracking-widest text-primary">ARENA</div>
-            </div>
-        </div>
-    );
-}
-
-const navLinks = [
-    { label: "Dashboard", to: "/dashboard" as const },
-    { label: "Challenges", to: "/challenges" as const },
-    { label: "Leaderboard", to: "/leaderboard" as const },
-    { label: "Events", to: "/admin/events" as const },
-    { label: "About Us", to: "/about" as const },
-];
 
 const values = [
     {
@@ -63,43 +43,7 @@ const values = [
 function AboutPage() {
     return (
         <main className="min-h-screen bg-background text-foreground">
-            {/* Header */}
-            <header className="border-b border-border/60">
-                <nav className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-5">
-                    <Link to="/" className="transition-opacity hover:opacity-80">
-                        <Logo />
-                    </Link>
-                    
-                    <ul className="hidden items-center gap-10 md:flex">
-                        {navLinks.map((l) => (
-                            <li key={l.label}>
-                                <Link
-                                    to={l.to}
-                                    className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                                    activeProps={{ className: "text-sm font-medium text-primary font-semibold" }}
-                                >
-                                    {l.label}
-                                </Link>
-                            </li>
-                        ))}
-                    </ul>
-
-                    <div className="flex items-center gap-4">
-                        <Link
-                            to="/admin/login"
-                            className="hidden text-sm font-medium text-foreground transition-colors hover:text-muted-foreground sm:inline"
-                        >
-                            Log in
-                        </Link>
-                        <Link
-                            to="/arena"
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-[var(--primary-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                        >
-                            Enter Arena
-                        </Link>
-                    </div>
-                </nav>
-            </header>
+            <Navbar />
 
             {/* Hero / Main Section (2-Column Layout matching MySocLabs) */}
             <section className="mx-auto max-w-7xl px-6 pt-8 pb-16 lg:pt-12 lg:pb-24">
