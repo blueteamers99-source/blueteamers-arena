@@ -14,9 +14,18 @@ class ChallengeSelector:
 
     @staticmethod
     def get_by_slug_or_id(identifier: str) -> Optional[Challenge]:
+        if not identifier:
+            return None
+        # Try slug lookup first
+        challenge = Challenge.objects.filter(slug=identifier).first()
+        if challenge:
+            return challenge
+        # Fallback to PK lookup if valid UUID string
         try:
-            return Challenge.objects.get(models.Q(slug=identifier) | models.Q(id=identifier))
-        except (Challenge.DoesNotExist, ValueError):
+            import uuid
+            uuid.UUID(str(identifier))
+            return Challenge.objects.filter(id=identifier).first()
+        except (ValueError, TypeError, AttributeError):
             return None
 
     @staticmethod

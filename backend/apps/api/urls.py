@@ -14,6 +14,7 @@ v1_urls = [
     path("", include("apps.submissions.urls")),
     path("", include("apps.leaderboard.urls")),
     path("", include("apps.audit.urls")),
+    path("", include("apps.notifications.urls")),
 ]
 
 urlpatterns = [

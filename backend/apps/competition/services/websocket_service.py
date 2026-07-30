@@ -38,3 +38,20 @@ class WebSocketService:
     @classmethod
     def notify_competition_completed(cls, event_code: str, completion_data: Dict[str, Any]):
         cls.broadcast_to_event(event_code, "competition_completed", completion_data)
+
+    @classmethod
+    def notify_user_notification(cls, user_id: str, data: Dict[str, Any]):
+        group_name = "global_notifications"
+        message = {
+            "type": "notification_push",
+            "data": data,
+        }
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(group_name, message)
+        except Exception as e:
+            logger.info(f"Notification push skipped: {e}")

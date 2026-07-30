@@ -10,10 +10,25 @@ class ParticipantUserWrapper:
     def __init__(self, participant):
         self.participant = participant
         self.id = participant.id
+        self.pk = participant.id
         self.email = participant.email
+        self.role = "STUDENT"
         self.is_authenticated = True
         self.is_anonymous = False
         self.is_staff = False
+        self.is_superuser = False
+
+    @property
+    def is_admin_role(self) -> bool:
+        return False
+
+    @property
+    def is_super_admin_role(self) -> bool:
+        return False
+
+    @property
+    def is_student_role(self) -> bool:
+        return True
 
     def __str__(self):
         return f"ParticipantUser ({self.email})"
@@ -23,6 +38,9 @@ class ParticipantTokenAuthentication(BaseAuthentication):
     """
     DRF Authentication Class for Student Participants using X-Participant-Token or Authorization: Participant <token>.
     """
+    def authenticate_header(self, request):
+        return 'Participant realm="api"'
+
     def authenticate(self, request):
         auth_header = request.headers.get("Authorization")
         token = request.headers.get("X-Participant-Token")

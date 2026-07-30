@@ -16,6 +16,7 @@ class ProgressViewSet(viewsets.ViewSet):
     authentication_classes = [ParticipantTokenAuthentication]
     permission_classes = [IsParticipant]
     lookup_field = "challenge_slug"
+    lookup_value_regex = "[^/]+"
 
     def get_participant(self, request):
         participant = getattr(request, "participant", None)
