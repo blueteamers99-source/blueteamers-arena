@@ -54,10 +54,10 @@ function StudentResetPassword() {
                 Your password has been updated. You can now log in with your new credentials.
               </p>
               <button
-                onClick={() => navigate({ to: "/login" })}
+                onClick={() => navigate({ to: "/" })}
                 className="w-full rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground"
               >
-                Proceed to Login
+                Proceed to Home
               </button>
             </div>
           ) : (

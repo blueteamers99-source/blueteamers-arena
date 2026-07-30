@@ -44,14 +44,8 @@ export function Navbar() {
           ))}
         </ul>
         <div className="flex items-center gap-4">
-          <Link
-            to="/login"
-            className="hidden text-sm font-medium text-foreground transition-colors hover:text-muted-foreground sm:inline"
-          >
-            Log in
-          </Link>
           <button
-            onClick={() => navigate({ to: "/login" })}
+            onClick={() => navigate({ to: "/student" })}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-[var(--primary-hover)] focus:outline-none"
           >
             Enter Arena
