@@ -16,6 +16,7 @@ import {
   Copy,
   X,
   RefreshCw,
+  Radio,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/events")({
@@ -23,23 +24,10 @@ export const Route = createFileRoute("/admin/events")({
   head: () => ({
     meta: [
       { title: "Events — Blueteamers Arena Admin" },
-      { name: "description", content: "Create, edit, and manage cybersecurity workshop events across colleges." },
-      { property: "og:title", content: "Events — Blueteamers Arena Admin" },
-      { property: "og:description", content: "Create, edit, and manage cybersecurity workshop events across colleges." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
+      { name: "description", content: "Manage workshop and CTF events." },
     ],
   }),
 });
-
-const navItems = [
-  { title: "Dashboard", icon: LayoutDashboard, href: "/admin/dashboard" },
-  { title: "Events", icon: Calendar, href: "/admin/events" },
-  { title: "Questions", icon: HelpCircle, href: "/admin/questions" },
-  { title: "Participants", icon: Users, href: "/admin/participants" },
-  { title: "Leaderboard", icon: Trophy, href: "/admin/dashboard?tab=leaderboard" },
-  { title: "Settings", icon: Settings, href: "/admin/settings" },
-];
 
 type EventStatus = "Live" | "Upcoming" | "Completed";
 
@@ -51,9 +39,18 @@ type EventRow = {
   participants: number;
   status: EventStatus;
   date: string;
+  description?: string;
 };
 
-/** Normalize API status strings to the three canonical display values */
+const navItems = [
+  { title: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+  { title: "Events", href: "/admin/events", icon: Calendar },
+  { title: "Questions", href: "/admin/questions", icon: HelpCircle },
+  { title: "Participants", href: "/admin/participants", icon: Users },
+  { title: "Leaderboard", href: "/leaderboard", icon: Trophy },
+  { title: "Settings", href: "/admin/settings", icon: Settings },
+];
+
 function normalizeStatus(raw: string | undefined | null): EventStatus {
   if (!raw) return "Upcoming";
   const s = raw.trim().toLowerCase();
@@ -65,7 +62,7 @@ function normalizeStatus(raw: string | undefined | null): EventStatus {
 const STATUS_FILTERS: ("All" | EventStatus)[] = ["All", "Live", "Upcoming", "Completed"];
 
 function getAdminToken(): string {
-  if (typeof localStorage === "undefined") return "";
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return "";
   return (
     localStorage.getItem("admin_access_token") ||
     localStorage.getItem("access_token") ||
@@ -80,16 +77,19 @@ function AdminEvents() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | EventStatus>("All");
   const [showCreate, setShowCreate] = useState(false);
+  const [viewingEvent, setViewingEvent] = useState<EventRow | null>(null);
+  const [editingEvent, setEditingEvent] = useState<EventRow | null>(null);
 
   const fetchEvents = () => {
     const token = getAdminToken();
-    fetch("/api/v1/events/", {
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    })
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    fetch("/api/v1/events/", { headers })
       .then((res) => {
+        if (res.status === 401 && token) {
+          return fetch("/api/v1/events/").then((r) => r.json());
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
@@ -113,6 +113,7 @@ function AdminEvents() {
             participants: Number(e.enrolled_participants ?? e.participants_count ?? e.participants ?? 0),
             status: normalizeStatus(e.status),
             date: String(e.event_date || e.date || "—"),
+            description: String(e.description || ""),
           }))
         );
         setError(null);
@@ -146,9 +147,13 @@ function AdminEvents() {
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this event?")) {
+      const token = getAdminToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       fetch(`/api/v1/events/${id}/`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${getAdminToken()}` },
+        headers,
       })
         .then(() => fetchEvents())
         .catch(() => fetchEvents());
@@ -158,12 +163,14 @@ function AdminEvents() {
   const handleDuplicate = (id: string) => {
     const src = events.find((e) => e.id === id);
     if (!src) return;
+
+    const token = getAdminToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
     fetch("/api/v1/events/", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getAdminToken()}`,
-      },
+      headers,
       body: JSON.stringify({
         name: `${src.name} (Copy)`,
         college_name: src.college,
@@ -171,10 +178,26 @@ function AdminEvents() {
         event_code: `${src.code}-CPY`,
         event_date: "2026-08-01",
         status: "Upcoming",
+        description: src.description || "",
       }),
     })
       .then(() => fetchEvents())
-      .catch(() => {});
+      .catch(() => fetchEvents());
+  };
+
+  const handleToggleStatus = (row: EventRow) => {
+    const nextStatus = row.status === "Live" ? "Completed" : "Live";
+    const token = getAdminToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    fetch(`/api/v1/events/${row.id}/`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ status: nextStatus }),
+    })
+      .then(() => fetchEvents())
+      .catch(() => fetchEvents());
   };
 
   const handleCreate = (formData: {
@@ -182,23 +205,41 @@ function AdminEvents() {
     workshop: string;
     date: string;
     code: string;
+    status?: EventStatus;
+    description?: string;
+    duration?: number;
+    passingScore?: number;
+    challenges?: number;
   }) => {
+    const token = getAdminToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const body = {
+      college_name: formData.college || "CBIT",
+      workshop_name: formData.workshop || "SOC Cyber Defense",
+      event_code: formData.code || `EVENT-${Date.now()}`,
+      event_date: formData.date || new Date().toISOString().split("T")[0],
+      duration_minutes: formData.duration || 60,
+      passing_score: formData.passingScore || 600,
+      total_challenges: formData.challenges || 5,
+      status: formData.status || "Upcoming",
+      description: formData.description || "",
+    };
+
     fetch("/api/v1/events/", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getAdminToken()}`,
-      },
-      body: JSON.stringify({
-        name: formData.workshop || "Untitled Workshop",
-        college_name: formData.college || "—",
-        workshop_name: formData.workshop || "Untitled Workshop",
-        event_code: formData.code || `EVENT-${Date.now()}`,
-        event_date: formData.date || "2026-08-01",
-        status: "Upcoming",
-      }),
+      headers,
+      body: JSON.stringify(body),
     })
       .then((res) => {
+        if (res.status === 401 && token) {
+          return fetch("/api/v1/events/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          }).then((r) => r.json());
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
@@ -209,6 +250,31 @@ function AdminEvents() {
       });
 
     setShowCreate(false);
+  };
+
+  const handleUpdate = (updated: EventRow) => {
+    const token = getAdminToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const body = {
+      college_name: updated.college,
+      workshop_name: updated.name,
+      event_code: updated.code,
+      event_date: updated.date,
+      status: updated.status,
+      description: updated.description || "",
+    };
+
+    fetch(`/api/v1/events/${updated.id}/`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(body),
+    })
+      .then(() => fetchEvents())
+      .catch(() => fetchEvents());
+
+    setEditingEvent(null);
   };
 
   return (
@@ -262,31 +328,34 @@ function AdminEvents() {
         </aside>
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Events</h1>
+              <h1 className="text-2xl font-bold">Events</h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 Create, publish, and manage workshop events across colleges.
               </p>
             </div>
+
             <button
               onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-[var(--primary-hover)]"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-[var(--primary-hover)]"
             >
               <Plus className="h-4 w-4" /> Create Event
             </button>
           </div>
 
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <div className="relative min-w-[240px] flex-1">
+          <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
+                type="text"
+                placeholder="Search events, colleges, codes…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search events, colleges, codes..."
-                className="w-full rounded-lg border border-border bg-card py-2.5 pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground focus:border-primary"
+                className="w-full rounded-lg border border-border bg-card py-2 pl-9 pr-4 text-sm outline-none placeholder:text-muted-foreground focus:border-primary"
               />
             </div>
+
             <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
               {STATUS_FILTERS.map((s) => (
                 <button
@@ -336,8 +405,15 @@ function AdminEvents() {
                         <td className="px-4 py-3 text-right text-muted-foreground">{row.date}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
-                            <IconBtn label="View"><Eye className="h-4 w-4" /></IconBtn>
-                            <IconBtn label="Edit"><Pencil className="h-4 w-4" /></IconBtn>
+                            <IconBtn label="View" onClick={() => setViewingEvent(row)}>
+                              <Eye className="h-4 w-4" />
+                            </IconBtn>
+                            <IconBtn label="Edit" onClick={() => setEditingEvent(row)}>
+                              <Pencil className="h-4 w-4" />
+                            </IconBtn>
+                            <IconBtn label="Toggle Status" onClick={() => handleToggleStatus(row)}>
+                              <Radio className="h-4 w-4" />
+                            </IconBtn>
                             <IconBtn label="Duplicate" onClick={() => handleDuplicate(row.id)}>
                               <Copy className="h-4 w-4" />
                             </IconBtn>
@@ -376,6 +452,21 @@ function AdminEvents() {
         <CreateEventModal
           onClose={() => setShowCreate(false)}
           onCreate={handleCreate}
+        />
+      )}
+
+      {viewingEvent && (
+        <ViewEventModal
+          event={viewingEvent}
+          onClose={() => setViewingEvent(null)}
+        />
+      )}
+
+      {editingEvent && (
+        <EditEventModal
+          event={editingEvent}
+          onClose={() => setEditingEvent(null)}
+          onUpdate={handleUpdate}
         />
       )}
     </main>
@@ -426,16 +517,166 @@ function generateCode(college: string) {
   return `${base}-${rand}`;
 }
 
+function ViewEventModal({ event, onClose }: { event: EventRow; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl space-y-4"
+      >
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-lg font-bold">{event.name}</h2>
+            <p className="text-xs text-muted-foreground">{event.college}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-[var(--surface)]">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-2 border-t border-b border-border/60 py-4 text-sm">
+          <div className="flex justify-between"><span className="text-muted-foreground">Event Code:</span><span className="font-mono">{event.code}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Status:</span><StatusBadge status={event.status} /></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Event Date:</span><span>{event.date}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Enrolled Participants:</span><span>{event.participants}</span></div>
+          {event.description && (
+            <div className="pt-2 text-xs text-muted-foreground">
+              <span className="font-semibold block text-foreground mb-1">Description:</span>
+              {event.description}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end">
+          <button onClick={onClose} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditEventModal({
+  event,
+  onClose,
+  onUpdate,
+}: {
+  event: EventRow;
+  onClose: () => void;
+  onUpdate: (updated: EventRow) => void;
+}) {
+  const [college, setCollege] = useState(event.college);
+  const [workshop, setWorkshop] = useState(event.name);
+  const [date, setDate] = useState(event.date);
+  const [code, setCode] = useState(event.code);
+  const [status, setStatus] = useState<EventStatus>(event.status);
+  const [description, setDescription] = useState(event.description || "");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdate({
+      ...event,
+      college,
+      name: workshop,
+      date,
+      code,
+      status,
+      description,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl space-y-4"
+      >
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-lg font-bold">Edit Event</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Update event details in PostgreSQL.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-[var(--surface)]">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="College">
+            <input required value={college} onChange={(e) => setCollege(e.target.value)} className={inputCls} />
+          </Field>
+          <Field label="Workshop Name">
+            <input required value={workshop} onChange={(e) => setWorkshop(e.target.value)} className={inputCls} />
+          </Field>
+          <Field label="Date">
+            <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+          </Field>
+          <Field label="Status">
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as EventStatus)}
+              className={inputCls}
+            >
+              <option value="Upcoming">Upcoming</option>
+              <option value="Live">Live</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="Event Code">
+              <input required value={code} onChange={(e) => setCode(e.target.value)} className={`${inputCls} font-mono`} />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Description">
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                className={inputCls}
+                placeholder="Event description..."
+              />
+            </Field>
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground">
+            Cancel
+          </button>
+          <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+            Save Changes
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function CreateEventModal({
   onClose,
   onCreate,
 }: {
   onClose: () => void;
-  onCreate: (data: { college: string; workshop: string; date: string; code: string }) => void;
+  onCreate: (data: {
+    college: string;
+    workshop: string;
+    date: string;
+    code: string;
+    status?: EventStatus;
+    description?: string;
+    duration?: number;
+    passingScore?: number;
+    challenges?: number;
+  }) => void;
 }) {
   const [college, setCollege] = useState("");
   const [workshop, setWorkshop] = useState("");
   const [date, setDate] = useState("");
+  const [status, setStatus] = useState<EventStatus>("Upcoming");
+  const [description, setDescription] = useState("");
   const [duration, setDuration] = useState("60");
   const [passingScore, setPassingScore] = useState("600");
   const [challenges, setChallenges] = useState("5");
@@ -444,7 +685,17 @@ function CreateEventModal({
   const publish = (e: React.FormEvent) => {
     e.preventDefault();
     const finalCode = code || generateCode(college);
-    onCreate({ college, workshop, date, code: finalCode });
+    onCreate({
+      college,
+      workshop,
+      date,
+      code: finalCode,
+      status,
+      description,
+      duration: Number(duration) || 60,
+      passingScore: Number(passingScore) || 600,
+      challenges: Number(challenges) || 5,
+    });
   };
 
   return (
@@ -452,9 +703,9 @@ function CreateEventModal({
       <form
         onSubmit={publish}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl"
+        className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl space-y-4"
       >
-        <div className="mb-5 flex items-start justify-between">
+        <div className="flex items-start justify-between">
           <div>
             <h2 className="text-lg font-bold">Create Event</h2>
             <p className="mt-1 text-xs text-muted-foreground">Configure a new workshop and publish it live.</p>
@@ -474,15 +725,28 @@ function CreateEventModal({
           <Field label="Date">
             <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
           </Field>
+          <Field label="Status">
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as EventStatus)}
+              className={inputCls}
+            >
+              <option value="Upcoming">Upcoming</option>
+              <option value="Live">Live</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </Field>
           <Field label="Duration (mins)">
             <input required type="number" min={10} value={duration} onChange={(e) => setDuration(e.target.value)} className={inputCls} />
           </Field>
           <Field label="Passing Score">
             <input required type="number" min={0} value={passingScore} onChange={(e) => setPassingScore(e.target.value)} className={inputCls} />
           </Field>
-          <Field label="Number of Challenges">
-            <input required type="number" min={1} value={challenges} onChange={(e) => setChallenges(e.target.value)} className={inputCls} />
-          </Field>
+          <div className="sm:col-span-2">
+            <Field label="Number of Challenges">
+              <input required type="number" min={1} value={challenges} onChange={(e) => setChallenges(e.target.value)} className={inputCls} />
+            </Field>
+          </div>
           <div className="sm:col-span-2">
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Event Code</label>
             <div className="flex gap-2">
@@ -500,6 +764,17 @@ function CreateEventModal({
                 <RefreshCw className="h-3.5 w-3.5" /> Generate
               </button>
             </div>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Description">
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                className={inputCls}
+                placeholder="Provide event details, prerequisites, and scope..."
+              />
+            </Field>
           </div>
         </div>
 

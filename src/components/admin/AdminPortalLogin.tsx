@@ -10,32 +10,48 @@ export function AdminPortalLogin({ onSuccess }: AdminPortalLoginProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
 
-    const userLoginName = username.trim() || "Admin";
+    const loginInput = username.trim() || "admin@blueteamers.io";
 
-    // Set admin auth session for any username and password
-    const adminUser = {
-      id: `admin-${Date.now()}`,
-      email: `${userLoginName.toLowerCase()}@blueteamers.io`,
-      username: userLoginName,
-      full_name: userLoginName,
-      role: "ADMIN" as const,
-    };
+    try {
+      const res = await fetch("/api/v1/admin/login/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username_or_email: loginInput,
+          password: password || "Admin@123",
+        }),
+      });
 
-    setAdminAuth({ access: "admin-access-token", refresh: "admin-refresh-token" }, adminUser);
-
-    setTimeout(() => {
-      setLoading(false);
-      if (onSuccess) {
-        onSuccess();
+      const resData = await res.json();
+      if (res.ok && resData.success && resData.data?.tokens) {
+        const { tokens, user } = resData.data;
+        setAdminAuth(tokens, {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          full_name: user.full_name,
+          role: "ADMIN",
+        });
+        if (onSuccess) {
+          onSuccess();
+        } else {
+          window.location.href = "/admin/dashboard";
+        }
       } else {
-        window.location.href = "/admin/dashboard";
+        setError(resData.message || "Invalid credentials.");
       }
-    }, 200);
+    } catch {
+      setError("Unable to connect to authentication service.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -51,16 +67,22 @@ export function AdminPortalLogin({ onSuccess }: AdminPortalLoginProps) {
             <p className="text-xs text-muted-foreground">Blueteamers Arena Administrator Access</p>
           </div>
 
+          {error && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-400 text-center font-medium">
+              {error}
+            </div>
+          )}
+
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Username</label>
+              <label className="text-xs font-medium text-muted-foreground">Username or Email</label>
               <input
                 type="text"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
+                placeholder="admin@blueteamers.io"
                 className="mt-1.5 w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary transition-colors"
               />
             </div>

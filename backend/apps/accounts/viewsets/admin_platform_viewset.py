@@ -2,6 +2,7 @@ from django.http import HttpResponse
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.permissions import AllowAny
 from drf_spectacular.utils import extend_schema
 from apps.common.utils.response import success_response, error_response
 from apps.accounts.permissions.is_admin import IsAdmin
@@ -14,8 +15,12 @@ from apps.accounts.serializers.admin_platform_serializer import (
 
 
 class AdminPlatformViewSet(viewsets.ViewSet):
-    permission_classes = [IsAdmin]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_permissions(self):
+        if self.action in ["dashboard", "event_analytics", "question_analytics"]:
+            return [AllowAny()]
+        return [IsAdmin()]
 
     @extend_schema(responses={200: dict})
     @action(detail=False, methods=["get"], url_path="dashboard")

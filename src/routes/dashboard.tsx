@@ -93,12 +93,13 @@ function Dashboard() {
   const [activeTab, setActiveTab] = useState<string>("Dashboard");
   const [rulesOpen, setRulesOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [ev, setEv] = useState<MockEvent | null>(null);
-  const [name, setName] = useState("Rahul");
+  const [name, setName] = useState("Student");
 
-  // Challenges state
-  const [progress, setProgress] = useState<ProgressMap>({});
-  const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
+  // Live state from PostgreSQL
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [challengeList, setChallengeList] = useState<any[]>([]);
+  const [leaderboardItems, setLeaderboardItems] = useState<any[]>([]);
+  const [selectedChallenge, setSelectedChallenge] = useState<any | null>(null);
   const [challengeSearch, setChallengeSearch] = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("All");
 
@@ -107,36 +108,71 @@ function Dashboard() {
   const [leaderboardFilter, setLeaderboardFilter] = useState<LeaderboardFilter>("All");
 
   useEffect(() => {
-    setEv(getSelectedEvent());
-    setName(getStudentName());
-    setProgress(getProgress());
+    fetch("/api/v1/dashboard/")
+      .then((res) => res.json())
+      .then((resData) => {
+        if (resData && (resData.data || resData.success)) {
+          const d = resData.data || resData;
+          setDashboardData(d);
+          if (d.student?.name) setName(d.student.name);
+          if (Array.isArray(d.challenges)) setChallengeList(d.challenges);
+        }
+      })
+      .catch((err) => console.error("Error fetching student dashboard:", err));
+
+    fetch("/api/v1/challenges/")
+      .then((res) => res.json())
+      .then((resData) => {
+        const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
+        if (Array.isArray(list) && list.length > 0) {
+          setChallengeList(list);
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/v1/leaderboard/")
+      .then((res) => res.json())
+      .then((resData) => {
+        const list = resData.data?.leaderboard || resData.leaderboard || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
+        if (Array.isArray(list)) {
+          setLeaderboardItems(list);
+        }
+      })
+      .catch((err) => console.error("Error fetching leaderboard:", err));
   }, []);
 
-  const score = useMemo(() => computeScore(progress), [progress]);
-  const done = useMemo(() => completedCount(progress), [progress]);
+  const score = useMemo(() => challengeList.reduce((acc, c) => acc + (c.points_earned || 0), 0), [challengeList]);
+  const done = useMemo(() => challengeList.filter((c) => c.is_completed || c.completed).length, [challengeList]);
 
   const filteredChallenges = useMemo(() => {
-    return CHALLENGES.filter((c) => {
-      const matchSearch =
-        c.name.toLowerCase().includes(challengeSearch.toLowerCase()) ||
-        c.description.toLowerCase().includes(challengeSearch.toLowerCase());
+    return challengeList.filter((c: any) => {
+      const title = String(c.title || c.name || "").toLowerCase();
+      const desc = String(c.description || "").toLowerCase();
+      const q = challengeSearch.toLowerCase();
+      const matchSearch = !q || title.includes(q) || desc.includes(q);
       const matchDiff =
         filterDifficulty === "All" ||
-        c.difficulty.toLowerCase() === filterDifficulty.toLowerCase();
+        String(c.difficulty || "").toLowerCase() === filterDifficulty.toLowerCase();
       return matchSearch && matchDiff;
     });
-  }, [challengeSearch, filterDifficulty]);
+  }, [challengeList, challengeSearch, filterDifficulty]);
 
   const filteredLeaderboardRows = useMemo(() => {
-    return tableRows.filter((row) => {
+    return leaderboardItems.map((p: any, idx: number) => ({
+      rank: idx + 1,
+      student: p.name || "Student",
+      challenges: `${p.completed || 0}/5`,
+      score: p.score || 0,
+      time: p.time_taken || "--:--",
+      status: p.completed > 0 ? "Completed" : "Running",
+    })).filter((row) => {
       const matchesSearch = row.student.toLowerCase().includes(leaderboardSearch.toLowerCase());
       const matchesFilter = leaderboardFilter === "All" || row.status === leaderboardFilter;
       return matchesSearch && matchesFilter;
     });
-  }, [leaderboardSearch, leaderboardFilter]);
+  }, [leaderboardItems, leaderboardSearch, leaderboardFilter]);
 
-  if (!ev) return null;
-  const accent = ACCENT_CLASSES[ev.accent];
+  const accent = { text: "text-primary", border: "border-primary", bg: "bg-primary" };
 
   const handleStartChallenge = (c: Challenge) => {
     setActive(c.id);

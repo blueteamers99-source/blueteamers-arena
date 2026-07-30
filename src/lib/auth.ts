@@ -21,14 +21,18 @@ const ADMIN_ACCESS_KEY = "admin_access_token";
 const ADMIN_REFRESH_KEY = "admin_refresh_token";
 const ADMIN_USER_KEY = "admin_user";
 
+const isBrowser = typeof window !== "undefined" && typeof localStorage !== "undefined";
+
 // Student Auth Helpers
 export const setStudentAuth = (tokens: { access: string; refresh: string }, user: AuthUser) => {
+  if (!isBrowser) return;
   localStorage.setItem(STUDENT_ACCESS_KEY, tokens.access);
   localStorage.setItem(STUDENT_REFRESH_KEY, tokens.refresh);
   localStorage.setItem(STUDENT_USER_KEY, JSON.stringify(user));
 };
 
 export const getStudentUser = (): AuthUser | null => {
+  if (!isBrowser) return null;
   const raw = localStorage.getItem(STUDENT_USER_KEY);
   if (!raw) return null;
   try {
@@ -39,10 +43,12 @@ export const getStudentUser = (): AuthUser | null => {
 };
 
 export const getStudentAccessToken = (): string | null => {
+  if (!isBrowser) return null;
   return localStorage.getItem(STUDENT_ACCESS_KEY);
 };
 
 export const clearStudentAuth = () => {
+  if (!isBrowser) return;
   localStorage.removeItem(STUDENT_ACCESS_KEY);
   localStorage.removeItem(STUDENT_REFRESH_KEY);
   localStorage.removeItem(STUDENT_USER_KEY);
@@ -55,12 +61,14 @@ export const isStudentLoggedIn = (): boolean => {
 
 // Admin Auth Helpers
 export const setAdminAuth = (tokens: { access: string; refresh: string }, user: AuthUser) => {
+  if (!isBrowser) return;
   localStorage.setItem(ADMIN_ACCESS_KEY, tokens.access);
   localStorage.setItem(ADMIN_REFRESH_KEY, tokens.refresh);
   localStorage.setItem(ADMIN_USER_KEY, JSON.stringify(user));
 };
 
 export const getAdminUser = (): AuthUser | null => {
+  if (!isBrowser) return null;
   const raw = localStorage.getItem(ADMIN_USER_KEY);
   if (!raw) return null;
   try {
@@ -71,10 +79,12 @@ export const getAdminUser = (): AuthUser | null => {
 };
 
 export const getAdminAccessToken = (): string | null => {
+  if (!isBrowser) return null;
   return localStorage.getItem(ADMIN_ACCESS_KEY);
 };
 
 export const clearAdminAuth = () => {
+  if (!isBrowser) return;
   localStorage.removeItem(ADMIN_ACCESS_KEY);
   localStorage.removeItem(ADMIN_REFRESH_KEY);
   localStorage.removeItem(ADMIN_USER_KEY);

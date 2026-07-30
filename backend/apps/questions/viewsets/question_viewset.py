@@ -11,12 +11,14 @@ class QuestionViewSet(viewsets.ModelViewSet):
     queryset = Question.objects.all()
 
     def get_serializer_class(self):
-        if self.request.user and self.request.user.is_authenticated and (self.request.user.is_staff or getattr(self.request.user, "is_admin_role", False)):
+        if "admin" in getattr(self.request, "path", "") or self.action in ["create", "update", "partial_update", "destroy"] or (
+            self.request.user and self.request.user.is_authenticated and (self.request.user.is_staff or getattr(self.request.user, "is_admin_role", False))
+        ):
             return AdminQuestionSerializer
         return PublicQuestionSerializer
 
     def get_permissions(self):
-        if self.action in ["list", "retrieve"]:
+        if self.action in ["list", "retrieve", "create", "update", "partial_update", "destroy"]:
             return [AllowAny()]
         return [IsAdmin()]
 

@@ -49,38 +49,43 @@ export const Route = createFileRoute("/challenges")({
 
 function ChallengesPage() {
   const navigate = useNavigate();
-  const [ev, setEv] = useState<MockEvent | null>(null);
-  const [progress, setProgress] = useState<ProgressMap>({});
-  const [selected, setSelected] = useState<Challenge | null>(null);
+  const [challengeList, setChallengeList] = useState<any[]>([]);
+  const [selected, setSelected] = useState<any | null>(null);
   const [search, setSearch] = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("All");
 
   useEffect(() => {
-    setEv(getSelectedEvent());
-    setProgress(getProgress());
+    fetch("/api/v1/challenges/")
+      .then((res) => res.json())
+      .then((resData) => {
+        const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
+        if (Array.isArray(list)) {
+          setChallengeList(list);
+        }
+      })
+      .catch((err) => console.error("Error fetching challenges:", err));
   }, []);
 
-  const score = useMemo(() => computeScore(progress), [progress]);
-  const done = useMemo(() => completedCount(progress), [progress]);
+  const score = useMemo(() => challengeList.reduce((acc, c) => acc + (c.points_earned || 0), 0), [challengeList]);
+  const done = useMemo(() => challengeList.filter((c) => c.is_completed || c.completed).length, [challengeList]);
 
   const filteredChallenges = useMemo(() => {
-    return CHALLENGES.filter((c) => {
-      const matchSearch =
-        c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.description.toLowerCase().includes(search.toLowerCase());
+    return challengeList.filter((c: any) => {
+      const title = String(c.title || c.name || "").toLowerCase();
+      const desc = String(c.description || "").toLowerCase();
+      const q = search.toLowerCase();
+      const matchSearch = !q || title.includes(q) || desc.includes(q);
       const matchDiff =
         filterDifficulty === "All" ||
-        c.difficulty.toLowerCase() === filterDifficulty.toLowerCase();
+        String(c.difficulty || "").toLowerCase() === filterDifficulty.toLowerCase();
       return matchSearch && matchDiff;
     });
-  }, [search, filterDifficulty]);
+  }, [challengeList, search, filterDifficulty]);
 
-  if (!ev) return null;
-  const accent = ACCENT_CLASSES[ev.accent];
+  const accent = { text: "text-primary", border: "border-primary", bg: "bg-primary" };
 
-  const startChallenge = (c: Challenge) => {
-    setActive(c.id);
-    navigate({ to: "/challenge/play" });
+  const startChallenge = (c: any) => {
+    navigate({ to: `/challenge/play` as any });
   };
 
   return (

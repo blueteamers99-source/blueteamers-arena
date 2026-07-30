@@ -6,6 +6,7 @@ router = DefaultRouter()
 router.register(r"health", HealthViewSet, basename="health")
 
 v1_urls = [
+    path("", include(router.urls)),
     path("", include("apps.accounts.urls")),
     path("", include("apps.events.urls")),
     path("", include("apps.participants.urls")),

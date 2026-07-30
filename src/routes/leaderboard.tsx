@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -27,33 +27,52 @@ export const Route = createFileRoute("/leaderboard")({
   }),
 });
 
-const podium = [
-  { rank: 1, medal: "🥇", name: "Rahul", score: 950, time: "1:42:18", color: "#F59E0B", border: "border-amber-500/60", bg: "from-amber-500/10 via-card to-card" },
-  { rank: 2, medal: "🥈", name: "Akhil", score: 910, time: "1:45:07", color: "#9CA3AF", border: "border-slate-400/40", bg: "from-slate-400/10 via-card to-card" },
-  { rank: 3, medal: "🥉", name: "Sanjay", score: 890, time: "1:48:12", color: "#B45309", border: "border-amber-700/40", bg: "from-amber-700/10 via-card to-card" },
-];
-
-const tableRows = [
-  { rank: 4, student: "Anjali", challenges: "5/5", score: 870, time: "1:49:52", status: "Completed" },
-  { rank: 5, student: "Kiran", challenges: "5/5", score: 850, time: "1:52:41", status: "Completed" },
-  { rank: 6, student: "Priya", challenges: "4/5", score: 720, time: "—", status: "Running" },
-  { rank: 7, student: "Rohith", challenges: "3/5", score: 610, time: "—", status: "Running" },
-];
-
 type Filter = "All" | "Completed" | "Running";
 
 function Leaderboard() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("All");
+  const [leaderboardItems, setLeaderboardItems] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch("/api/v1/leaderboard/")
+      .then((res) => res.json())
+      .then((resData) => {
+        const list = resData.data?.leaderboard || resData.leaderboard || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
+        if (Array.isArray(list)) {
+          setLeaderboardItems(list);
+        }
+      })
+      .catch((err) => console.error("Error fetching leaderboard:", err));
+  }, []);
+
+  const podiumData = leaderboardItems.slice(0, 3).map((p: any, idx: number) => ({
+    rank: idx + 1,
+    medal: idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉",
+    name: p.name || "Student",
+    score: p.score || 0,
+    time: p.time_taken || "--:--",
+    color: idx === 0 ? "#F59E0B" : idx === 1 ? "#9CA3AF" : "#B45309",
+    border: idx === 0 ? "border-amber-500/60" : idx === 1 ? "border-slate-400/40" : "border-amber-700/40",
+    bg: idx === 0 ? "from-amber-500/10 via-card to-card" : idx === 1 ? "from-slate-400/10 via-card to-card" : "from-amber-700/10 via-card to-card",
+  }));
+
+  const sortedPodium = podiumData.length >= 3 ? [podiumData[1], podiumData[0], podiumData[2]] : podiumData;
+
+  const tableRows = leaderboardItems.slice(3).map((p: any, idx: number) => ({
+    rank: idx + 4,
+    student: p.name || "Student",
+    challenges: `${p.completed || 0}/5`,
+    score: p.score || 0,
+    time: p.time_taken || "--:--",
+    status: p.completed > 0 ? "Completed" : "Running",
+  }));
 
   const filteredRows = tableRows.filter((row) => {
     const matchesSearch = row.student.toLowerCase().includes(search.toLowerCase());
     const matchesFilter = filter === "All" || row.status === filter;
     return matchesSearch && matchesFilter;
   });
-
-  // Display podium items in 2 - 1 - 3 order for classic championship podium
-  const sortedPodium = [podium[1], podium[0], podium[2]];
 
   return (
     <main className="relative min-h-screen bg-background text-foreground overflow-hidden">
