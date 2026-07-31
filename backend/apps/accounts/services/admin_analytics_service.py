@@ -44,6 +44,17 @@ class AdminAnalyticsService:
             .values("id", "name", "email", "event__college_name", "score", "completed")
         )
 
+        recent_events = (
+            Event.objects.annotate(enrolled_participants=Count("participants"))
+            .order_by("-created_at")[:5]
+            .values("id", "college_name", "workshop_name", "event_code", "status", "created_at", "enrolled_participants", "event_date")
+        )
+
+        recent_activity = [
+            f"Event '{e['workshop_name']}' for {e['college_name']} is currently {e['status']}."
+            for e in recent_events
+        ]
+
         return {
             "summary": {
                 "total_events": total_events,
@@ -55,6 +66,8 @@ class AdminAnalyticsService:
                 "average_score": avg_score,
                 "completion_rate": f"{completion_rate}%",
             },
+            "recent_events": list(recent_events),
+            "recent_activity": recent_activity,
             "top_colleges": list(top_colleges),
             "top_participants": list(top_participants),
         }
