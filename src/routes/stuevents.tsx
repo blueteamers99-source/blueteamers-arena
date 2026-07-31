@@ -20,6 +20,7 @@ import {
 import { ACCENT_CLASSES, getSelectedEvent, saveSelectedEvent, type MockEvent } from "@/lib/mock-events";
 import { Navbar } from "@/components/Navbar";
 import { API_BASE_URL } from "@/lib/config";
+import { useValidateEventCode } from "@/hooks/useValidateEventCode";
 
 type EventStatus = "Live" | "Upcoming" | "Completed";
 
@@ -324,45 +325,18 @@ function EnterEventCodeModal({
     }
     return "";
   });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+
+  const { loading, error, success, validateCode, reset } = useValidateEventCode();
 
   const handleValidation = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const rawInput = code.trim();
-    if (!rawInput) {
-      setError("Please enter your event code.");
-      return;
-    }
+    if (!code.trim()) return;
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/events/validate-code/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event_code: rawInput }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok && data.success && data.event) {
-        setSuccess(true);
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem("saved_event_code", data.event.event_code || rawInput.toUpperCase());
-        }
-        setTimeout(() => {
-          onSuccess(data.event);
-        }, 600);
-      } else {
-        setError(data.message || "Invalid Event Code");
-      }
-    } catch {
-      setError("Invalid Event Code");
-    } finally {
-      setLoading(false);
+    const res = await validateCode(code);
+    if (res.success && res.event) {
+      setTimeout(() => {
+        onSuccess(res.event);
+      }, 500);
     }
   };
 
@@ -404,11 +378,12 @@ function EnterEventCodeModal({
                 value={code}
                 onChange={(e) => {
                   setCode(e.target.value.toUpperCase());
-                  setError(null);
+                  reset();
                 }}
                 onPaste={(e) => {
                   const pasted = e.clipboardData.getData("text");
                   setCode(pasted.toUpperCase().trim());
+                  reset();
                 }}
                 placeholder="e.g. CBIT-3154"
                 disabled={loading || success}
