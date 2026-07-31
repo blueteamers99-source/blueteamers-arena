@@ -94,6 +94,7 @@ function Dashboard() {
   const [rulesOpen, setRulesOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [name, setName] = useState("Student");
+  const [ev, setEv] = useState<MockEvent>(() => getSelectedEvent());
 
   // Live state from PostgreSQL
   const [dashboardData, setDashboardData] = useState<any>(null);
@@ -108,6 +109,7 @@ function Dashboard() {
   const [leaderboardFilter, setLeaderboardFilter] = useState<LeaderboardFilter>("All");
 
   useEffect(() => {
+    setEv(getSelectedEvent());
     fetch("/api/v1/dashboard/")
       .then((res) => res.json())
       .then((resData) => {
@@ -172,7 +174,7 @@ function Dashboard() {
     });
   }, [leaderboardItems, leaderboardSearch, leaderboardFilter]);
 
-  const accent = { text: "text-primary", border: "border-primary", bg: "bg-primary" };
+  const accent = { text: "text-primary", border: "border-primary", bg: "bg-primary", bgSoft: "bg-primary/10", hover: "hover:bg-primary/80" };
 
   const handleStartChallenge = (c: Challenge) => {
     setActive(c.id);
@@ -182,8 +184,8 @@ function Dashboard() {
   const dashboardStats = [
     { label: "Progress", value: "0%", icon: BarChart3, sub: "Completion rate" },
     { label: "Score", value: "0", icon: Flame, sub: "Points earned" },
-    { label: "Rank", value: "--", icon: Trophy, sub: `/ ${ev.participants} Participants` },
-    { label: "Challenges", value: `0 / ${ev.challenges}`, icon: Target, sub: "Completed" },
+    { label: "Rank", value: "--", icon: Trophy, sub: `/ ${ev?.participants ?? 180} Participants` },
+    { label: "Challenges", value: `0 / ${ev?.challenges ?? 20}`, icon: Target, sub: "Completed" },
   ];
 
   const sortedPodium = [podium[1], podium[0], podium[2]];
@@ -222,9 +224,7 @@ function Dashboard() {
 
             <button
               onClick={() => setCollapsed(!collapsed)}
-              className={`rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground ${
-                collapsed ? "mt-2 mx-auto" : ""
-              }`}
+              className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -299,7 +299,7 @@ function Dashboard() {
           <div className="flex items-center gap-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card px-3.5 py-1 text-xs font-semibold text-foreground shadow-sm">
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>{ev.college} • {ev.workshop}</span>
+              <span>{ev?.college || "CBIT"} • {ev?.workshop || "AI with SOC Workshop"}</span>
             </div>
           </div>
         </header>
@@ -324,7 +324,7 @@ function Dashboard() {
                   </h1>
                   <div className="mt-2.5 inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-3.5 py-1 text-xs font-medium text-muted-foreground shadow-sm">
                     <ShieldCheck className={`h-3.5 w-3.5 ${accent.text}`} />
-                    <span>{ev.college} • {ev.workshop}</span>
+                    <span>{ev?.college || "CBIT"} • {ev?.workshop || "AI with SOC Workshop"}</span>
                   </div>
                 </div>
 
@@ -383,16 +383,16 @@ function Dashboard() {
                 <h3 className="text-xl font-bold tracking-tight">Event Info</h3>
                 <dl className="mt-4 space-y-2.5 text-sm">
                   {[
-                    ["Event", ev.workshop],
-                    ["College", ev.college],
-                    ["Date", ev.date],
-                    ["Duration", ev.duration],
+                    ["Event", ev?.workshop || "AI with SOC Workshop"],
+                    ["College", ev?.college || "CBIT"],
+                    ["Date", ev?.date || "22 July 2026"],
+                    ["Duration", ev?.duration || "60 Minutes"],
                   ].map(([k, v]) => (
                     <div
                       key={k}
                       className="flex items-center justify-between rounded-xl border border-border/40 bg-card/60 px-4 py-2.5 transition-colors hover:border-border"
                     >
-                      <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{k}</dt>
+                      <dt className="text-muted-foreground font-medium">{k}</dt>
                       <dd className="font-semibold text-foreground">{v}</dd>
                     </div>
                   ))}
@@ -402,61 +402,37 @@ function Dashboard() {
           </div>
         )}
 
-        {/* Tab 2: Embedded Challenges View */}
+        {/* Tab 2: Challenges List */}
         {activeTab === "Challenges" && (
-          <div className="p-6 lg:p-8 space-y-8 w-full max-w-[1600px]">
-            {/* Stat Cards 3-Grid */}
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-              <StatCard
-                icon={<Target className={`h-4 w-4 ${accent.text}`} />}
-                label="Progress"
-                value={`${done} / ${CHALLENGES.length}`}
-                sub="Challenges Completed"
-              />
-              <StatCard
-                icon={<Trophy className={`h-4 w-4 ${accent.text}`} />}
-                label="Current Score"
-                value={`${score} / ${TOTAL_POINTS}`}
-                sub="Points Earned"
-              />
-              <StatCard
-                icon={<Clock className={`h-4 w-4 ${accent.text}`} />}
-                label="Time Remaining"
-                value="02:05:18"
-                sub="Hours Left"
-              />
-            </div>
-
+          <div className="p-6 lg:p-8 space-y-6 w-full max-w-[1600px]">
             {/* Section Header & Filter Controls */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pt-2">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
-                  Investigation Challenges
-                </h2>
+                <h2 className="text-2xl font-extrabold tracking-tight">Investigation Challenges</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Complete challenges in any order. Only one challenge can be active at a time.
                 </p>
               </div>
 
               {/* Search & Filter Inputs */}
-              <div className="flex flex-wrap items-center gap-3.5">
-                <div className="relative min-w-[260px] sm:min-w-[320px]">
-                  <Search className="absolute left-3.5 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-muted-foreground" />
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative min-w-[240px]">
+                  <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type="text"
                     value={challengeSearch}
                     onChange={(e) => setChallengeSearch(e.target.value)}
                     placeholder="Search challenges..."
-                    className="w-full rounded-xl border border-border/80 bg-card py-2.5 pl-10 pr-4 text-sm font-medium text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-primary focus:ring-1 focus:ring-primary/40 shadow-sm"
+                    className="w-full rounded-xl border border-border/80 bg-card py-2 pl-9 pr-4 text-sm outline-none focus:border-primary"
                   />
                 </div>
 
-                <div className="flex items-center gap-1.5 rounded-2xl border border-border/80 bg-card p-1.5 shadow-sm">
+                <div className="flex items-center gap-1 rounded-xl border border-border/80 bg-card p-1">
                   {["All", "Easy", "Medium", "Hard"].map((diff) => (
                     <button
                       key={diff}
                       onClick={() => setFilterDifficulty(diff)}
-                      className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all ${
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
                         filterDifficulty.toLowerCase() === diff.toLowerCase()
                           ? `${accent.bg} text-white shadow-sm`
                           : "text-muted-foreground hover:text-foreground"
@@ -472,26 +448,27 @@ function Dashboard() {
             {/* Challenges List */}
             <ul className="space-y-4">
               {filteredChallenges.map((c) => {
-                const status = progress[c.id] ?? "not_started";
+                const status = (c.is_completed || c.completed) ? "completed" : "not_started";
+                const diffBadge = (DIFFICULTY_BADGE as any)[c.difficulty] || "border-blue-500/30 bg-blue-500/10 text-blue-400";
                 return (
                   <li key={c.id}>
                     <button
                       onClick={() => setSelectedChallenge(c)}
-                      className="group relative flex w-full items-center gap-5 rounded-2xl border border-border/80 bg-card p-6 text-left shadow-lg shadow-black/20 backdrop-blur-sm transition-all duration-300 hover:border-primary/50 hover:bg-card/95 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5"
+                      className="group relative flex w-full items-center gap-5 rounded-2xl border border-border/80 bg-card p-6 text-left shadow-lg shadow-black/20 backdrop-blur-sm transition-all duration-300 hover:border-primary/50 hover:bg-card/95 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5 cursor-pointer"
                     >
                       <div
                         className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl font-bold text-lg shadow-inner ${accent.bgSoft} ${accent.text} border border-border/40 group-hover:scale-105 transition-transform`}
                       >
-                        {c.number}
+                        {c.number || 1}
                       </div>
 
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2.5">
                           <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
-                            {c.name}
+                            {c.title || c.name}
                           </h3>
                           <span
-                            className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide ${DIFFICULTY_BADGE[c.difficulty]}`}
+                            className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide ${diffBadge}`}
                           >
                             {c.difficulty}
                           </span>

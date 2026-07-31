@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { ACCENT_CLASSES, getSelectedEvent, type MockEvent } from "@/lib/mock-events";
+import { Navbar } from "@/components/Navbar";
 
 type EventStatus = "Live" | "Upcoming" | "Completed";
 
@@ -49,7 +50,7 @@ export const Route = createFileRoute("/stuevents")({
 });
 
 export default function StuEvents() {
-  const [ev, setEv] = useState<MockEvent | null>(null);
+  const [ev, setEv] = useState<MockEvent>(() => getSelectedEvent());
   const [events, setEvents] = useState<EventRow[]>([]);
   const [selected, setSelected] = useState<EventRow | null>(null);
   const [search, setSearch] = useState("");
@@ -108,7 +109,7 @@ export default function StuEvents() {
     return { totalEvents, liveEvents, upcomingEvents, completedEvents, totalParticipants };
   }, [events]);
 
-  const accent = ev ? ACCENT_CLASSES[ev.accent] : ACCENT_CLASSES.blue;
+  const accent = (ev && ev.accent && ACCENT_CLASSES[ev.accent]) ? ACCENT_CLASSES[ev.accent] : ACCENT_CLASSES.blue;
 
   return (
     <div className="relative min-h-screen bg-background text-foreground overflow-hidden">

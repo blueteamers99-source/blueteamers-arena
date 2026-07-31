@@ -82,7 +82,8 @@ function ChallengesPage() {
     });
   }, [challengeList, search, filterDifficulty]);
 
-  const accent = { text: "text-primary", border: "border-primary", bg: "bg-primary" };
+  const accent = { text: "text-primary", border: "border-primary", bg: "bg-primary", bgSoft: "bg-primary/10", hover: "hover:bg-primary/80" };
+  const progress = useMemo(() => getProgress(), []);
 
   const startChallenge = (c: any) => {
     navigate({ to: `/challenge/play` as any });
@@ -164,7 +165,7 @@ function ChallengesPage() {
         {/* Challenges List */}
         <ul className="space-y-4">
           {filteredChallenges.map((c) => {
-            const status = progress[c.id] ?? "not_started";
+            const status = (c.is_completed || c.completed) ? "completed" : (progress[c.id] ?? "not_started");
             return (
               <li key={c.id}>
                 <button
@@ -185,7 +186,7 @@ function ChallengesPage() {
                         {c.name}
                       </h3>
                       <span
-                        className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide ${DIFFICULTY_BADGE[c.difficulty]}`}
+                        className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide ${(DIFFICULTY_BADGE as any)[c.difficulty] || "border-blue-500/30 bg-blue-500/10 text-blue-400"}`}
                       >
                         {c.difficulty}
                       </span>
