@@ -31,9 +31,15 @@ class StudentSignupSerializer(serializers.Serializer):
 
 
 class StudentLoginSerializer(serializers.Serializer):
-    identifier = serializers.CharField(help_text="Email or Username")
+    identifier = serializers.CharField(required=False, allow_blank=True, default="", help_text="Email or Username")
     password = serializers.CharField(write_only=True)
     remember_me = serializers.BooleanField(default=False, required=False)
+
+    def to_internal_value(self, data):
+        data = data.copy() if hasattr(data, "copy") else dict(data)
+        if not data.get("identifier"):
+            data["identifier"] = data.get("email") or data.get("username_or_email") or data.get("username") or ""
+        return super().to_internal_value(data)
 
 
 class GoogleAuthSerializer(serializers.Serializer):

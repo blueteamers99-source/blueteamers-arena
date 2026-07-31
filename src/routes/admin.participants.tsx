@@ -37,16 +37,17 @@ type ParticipantItem = {
   finished_at?: string;
 };
 
-const initialParticipants: ParticipantItem[] = [
-  { id: "1", name: "Rahul Sharma", email: "rahul@cbit.ac.in", college_name: "CBIT", event_code: "CBIT2026", score: 85, completed: 5 },
-  { id: "2", name: "Anjali Verma", email: "anjali@vnr.ac.in", college_name: "VNR", event_code: "VNR2026", score: 90, completed: 5 },
-  { id: "3", name: "Vikram Reddy", email: "vikram@mgit.ac.in", college_name: "MGIT", event_code: "MGIT2026", score: 70, completed: 4 },
-  { id: "4", name: "Sneha Patel", email: "sneha@jntu.ac.in", college_name: "JNTU", event_code: "JNTU2026", score: 95, completed: 5 },
-  { id: "5", name: "Karthik Raju", email: "karthik@cbit.ac.in", college_name: "CBIT", event_code: "CBIT2026", score: 60, completed: 3 },
-];
+function getAdminToken(): string {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return "";
+  return (
+    localStorage.getItem("admin_access_token") ||
+    localStorage.getItem("access_token") ||
+    ""
+  );
+}
 
 function AdminParticipants() {
-  const [participants, setParticipants] = useState<ParticipantItem[]>(initialParticipants);
+  const [participants, setParticipants] = useState<ParticipantItem[]>([]);
   const [query, setQuery] = useState("");
   const [eventFilter, setEventFilter] = useState("All");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -56,28 +57,39 @@ function AdminParticipants() {
   const [newEmail, setNewEmail] = useState("");
   const [newCollege, setNewCollege] = useState("CBIT");
 
-  useEffect(() => {
-    fetch("/api/v1/admin/participants/")
-      .then((res) => res.json())
+  const loadParticipants = () => {
+    const token = getAdminToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    fetch("/api/v1/admin/participants/", { headers })
+      .then((res) => {
+        if (res.status === 401 && token) {
+          return fetch("/api/v1/admin/participants/").then((r) => r.json());
+        }
+        return res.json();
+      })
       .then((resData) => {
-        if (resData && (resData.success || resData.results)) {
-          const list = resData.data?.results || resData.results || resData.data;
-          if (Array.isArray(list) && list.length > 0) {
-            setParticipants(
-              list.map((item: any) => ({
-                id: strVal(item.id),
-                name: item.name || "Student",
-                email: item.email || "",
-                college_name: item.college_name || item.event?.college_name || "College",
-                event_code: item.event_code || item.event?.event_code || "EVENT",
-                score: item.score || 0,
-                completed: item.completed || 0,
-              }))
-            );
-          }
+        const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
+        if (Array.isArray(list)) {
+          setParticipants(
+            list.map((item: any) => ({
+              id: strVal(item.id),
+              name: item.name || "Student",
+              email: item.email || "",
+              college_name: item.college_name || item.event?.college_name || "College",
+              event_code: item.event_code || item.event?.event_code || "EVENT",
+              score: item.score || 0,
+              completed: item.completed || 0,
+            }))
+          );
         }
       })
-      .catch(() => {});
+      .catch((err) => console.error("Error fetching participants:", err));
+  };
+
+  useEffect(() => {
+    loadParticipants();
   }, []);
 
   const strVal = (val: any) => (val ? String(val) : String(Math.random()));
@@ -93,7 +105,9 @@ function AdminParticipants() {
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this participant?")) {
-      fetch(`/api/v1/admin/participants/${id}/`, { method: "DELETE" }).catch(() => {});
+      fetch(`/api/v1/admin/participants/${id}/`, { method: "DELETE" })
+        .then(() => loadParticipants())
+        .catch(() => {});
       setParticipants((prev) => prev.filter((p) => p.id !== id));
     }
   };
@@ -101,23 +115,22 @@ function AdminParticipants() {
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName || !newEmail) return;
-    const newItem: ParticipantItem = {
-      id: String(Date.now()),
-      name: newName,
-      email: newEmail,
-      college_name: newCollege,
-      event_code: `${newCollege}2026`,
-      score: 0,
-      completed: 0,
-    };
 
     fetch("/api/v1/admin/participants/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newItem),
-    }).catch(() => {});
+      body: JSON.stringify({
+        name: newName,
+        email: newEmail,
+        college_name: newCollege,
+      }),
+    })
+      .then((res) => res.json())
+      .then(() => {
+        loadParticipants();
+      })
+      .catch((err) => console.error("Error creating student:", err));
 
-    setParticipants((prev) => [newItem, ...prev]);
     setShowAddModal(false);
     setNewName("");
     setNewEmail("");

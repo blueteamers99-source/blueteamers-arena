@@ -36,43 +36,6 @@ export const Route = createFileRoute("/admin/dashboard")({
   }),
 });
 
-const stats = [
-  { label: "Total Events", value: "12" },
-  { label: "Participants", value: "486" },
-  { label: "Active Events", value: "3" },
-  { label: "Questions", value: "125" },
-];
-
-const recentEvents = [
-  { event: "CBIT AI with SOC", college: "CBIT", participants: 84, status: "Live", date: "22 Jul 2026" },
-  { event: "VNR Cyber Workshop", college: "VNR", participants: 62, status: "Completed", date: "20 Jul 2026" },
-  { event: "ACE Engineering", college: "ACE", participants: 95, status: "Upcoming", date: "25 Jul 2026" },
-];
-
-const recentActivity = [
-  "Rahul joined CBIT event",
-  "New Event Created",
-  "5 Challenges Completed",
-  "Leaderboard Updated",
-  "Anjali submitted Incident Zero",
-  "CBIT event timer extended",
-];
-
-const podium = [
-  { rank: 1, medal: "🥇", name: "Rahul", college: "CBIT", score: 950, time: "1:42:18", color: "#F59E0B", border: "border-amber-500/60", bg: "from-amber-500/10 via-card to-card" },
-  { rank: 2, medal: "🥈", name: "Akhil", college: "VNR", score: 910, time: "1:45:07", color: "#9CA3AF", border: "border-slate-400/40", bg: "from-slate-400/10 via-card to-card" },
-  { rank: 3, medal: "🥉", name: "Sanjay", college: "CBIT", score: 890, time: "1:48:12", color: "#B45309", border: "border-amber-700/40", bg: "from-amber-700/10 via-card to-card" },
-];
-
-const leaderboardRows = [
-  { rank: 4, student: "Anjali", college: "CBIT", challenges: "5/5", score: 870, time: "1:49:52", status: "Completed" },
-  { rank: 5, student: "Kiran", college: "VNR", challenges: "5/5", score: 850, time: "1:52:41", status: "Completed" },
-  { rank: 6, student: "Priya", college: "ACE", challenges: "4/5", score: 720, time: "—", status: "Running" },
-  { rank: 7, student: "Rohith", college: "MGIT", challenges: "3/5", score: 610, time: "—", status: "Running" },
-  { rank: 8, student: "Sneha", college: "CBIT", challenges: "3/5", score: 580, time: "—", status: "Running" },
-  { rank: 9, student: "Vikram", college: "JNTU", challenges: "2/5", score: 440, time: "—", status: "Running" },
-];
-
 type LeaderboardFilter = "All" | "Completed" | "Running";
 
 function AdminDashboard() {
@@ -82,24 +45,94 @@ function AdminDashboard() {
   const [lbFilter, setLbFilter] = useState<LeaderboardFilter>("All");
   const [selectedEvent, setSelectedEvent] = useState("All Events");
 
+  const [dashStats, setDashStats] = useState({
+    total_events: 0,
+    active_events: 0,
+    total_participants: 0,
+    total_questions: 0,
+    recent_events: [] as any[],
+    recent_activity: [] as any[],
+  });
+
+  const [leaderboardItems, setLeaderboardItems] = useState<any[]>([]);
+
   useEffect(() => {
     if (search.tab) {
       setActiveTab(search.tab);
     }
   }, [search.tab]);
 
-  const sortedPodium = [podium[1], podium[0], podium[2]];
+  useEffect(() => {
+    fetch("/api/v1/admin/dashboard/")
+      .then((res) => res.json())
+      .then((resData) => {
+        if (resData && (resData.data || resData.success)) {
+          const d = resData.data || resData;
+          setDashStats({
+            total_events: d.total_events || 0,
+            active_events: d.active_events || 0,
+            total_participants: d.total_participants || 0,
+            total_questions: d.total_questions || 0,
+            recent_events: Array.isArray(d.recent_events) ? d.recent_events : [],
+            recent_activity: Array.isArray(d.recent_activity) ? d.recent_activity : [],
+          });
+        }
+      })
+      .catch((err) => console.error("Error fetching admin dashboard stats:", err));
 
-  const filteredLeaderboard = leaderboardRows.filter((row) => {
-    const matchesSearch =
-      row.student.toLowerCase().includes(lbSearch.toLowerCase()) ||
-      row.college.toLowerCase().includes(lbSearch.toLowerCase());
-    const matchesFilter = lbFilter === "All" || row.status === lbFilter;
-    const matchesEvent =
-      selectedEvent === "All Events" ||
-      (selectedEvent === "CBIT AI with SOC" && row.college === "CBIT") ||
-      (selectedEvent === "VNR Cyber Workshop" && row.college === "VNR");
-    return matchesSearch && matchesFilter && matchesEvent;
+    fetch("/api/v1/leaderboard/")
+      .then((res) => res.json())
+      .then((resData) => {
+        const list = resData.data?.leaderboard || resData.leaderboard || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
+        if (Array.isArray(list)) {
+          setLeaderboardItems(list);
+        }
+      })
+      .catch((err) => console.error("Error fetching leaderboard:", err));
+  }, []);
+
+  const stats = [
+    { label: "Total Events", value: String(dashStats.total_events) },
+    { label: "Participants", value: String(dashStats.total_participants) },
+    { label: "Active Events", value: String(dashStats.active_events) },
+    { label: "Questions", value: String(dashStats.total_questions) },
+  ];
+
+  const recentEvents = dashStats.recent_events.length > 0
+    ? dashStats.recent_events.map((e: any) => ({
+        event: e.title || e.name || "CTF Event",
+        college: e.college_name || "College",
+        participants: e.enrolled_participants || e.participants_count || 0,
+        status: e.is_active ? "Live" : "Completed",
+        date: e.event_date || "2026-08-01",
+      }))
+    : [];
+
+  const recentActivity = dashStats.recent_activity.length > 0
+    ? dashStats.recent_activity
+    : ["System initialized with PostgreSQL."];
+
+  const podium = leaderboardItems.slice(0, 3).map((p: any, idx: number) => ({
+    rank: idx + 1,
+    medal: idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉",
+    name: p.name || "Student",
+    college: p.college_name || "College",
+    score: p.score || 0,
+    time: p.time_taken || "--:--",
+    color: idx === 0 ? "#F59E0B" : idx === 1 ? "#9CA3AF" : "#B45309",
+    border: idx === 0 ? "border-amber-500/60" : idx === 1 ? "border-slate-400/40" : "border-amber-700/40",
+    bg: idx === 0 ? "from-amber-500/10 via-card to-card" : idx === 1 ? "from-slate-400/10 via-card to-card" : "from-amber-700/10 via-card to-card",
+  }));
+
+  const sortedPodium = podium.length >= 3 ? [podium[1], podium[0], podium[2]] : podium;
+
+  const filteredLeaderboard = leaderboardItems.filter((row) => {
+    const name = String(row.name || "").toLowerCase();
+    const college = String(row.college_name || "").toLowerCase();
+    const q = lbSearch.toLowerCase();
+    const matchesSearch = !q || name.includes(q) || college.includes(q);
+    const matchesFilter = lbFilter === "All" || (lbFilter === "Completed" ? row.completed > 0 : row.completed === 0);
+    return matchesSearch && matchesFilter;
   });
 
   return (

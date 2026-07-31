@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 
 class SaveDraftRequestSerializer(serializers.Serializer):
-    question_id = serializers.UUIDField(required=True)
+    question_id = serializers.CharField(required=True)
     answer_text = serializers.CharField(required=False, allow_blank=True, default="")
     selected_options = serializers.ListField(child=serializers.CharField(), required=False, default=list)
     selected_option_index = serializers.IntegerField(required=False, allow_null=True, default=None)

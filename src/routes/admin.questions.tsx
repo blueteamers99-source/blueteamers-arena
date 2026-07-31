@@ -45,74 +45,19 @@ type Question = {
 
 const CATEGORIES: Category[] = ["Phishing", "SIEM", "AI", "Incident Response", "Digital Forensics"];
 
-const seed: Question[] = [
-  {
-    id: "1",
-    question: "Which header field is most useful to verify the true sender of an email?",
-    category: "Phishing",
-    difficulty: "Easy",
-    marks: 10,
-    status: "Published",
-    options: ["From", "Reply-To", "Return-Path", "Subject"],
-    correct: 2,
-    explanation: "Return-Path shows the actual envelope sender used for bounces.",
-  },
-  {
-    id: "2",
-    question: "In Wazuh, which rule level typically indicates a critical security alert?",
-    category: "SIEM",
-    difficulty: "Medium",
-    marks: 15,
-    status: "Published",
-    options: ["Level 3", "Level 7", "Level 12", "Level 15"],
-    correct: 3,
-  },
-  {
-    id: "3",
-    question: "What is the primary risk of blindly trusting an AI-generated incident summary?",
-    category: "AI",
-    difficulty: "Medium",
-    marks: 15,
-    status: "Draft",
-    options: ["Slower triage", "Hallucinated indicators", "Higher CPU usage", "Lower cost"],
-    correct: 1,
-  },
-  {
-    id: "4",
-    question: "Which NIST IR phase includes evidence preservation and root cause analysis?",
-    category: "Incident Response",
-    difficulty: "Hard",
-    marks: 25,
-    status: "Published",
-    options: ["Preparation", "Detection", "Containment, Eradication & Recovery", "Post-Incident Activity"],
-    correct: 2,
-  },
-  {
-    id: "5",
-    question: "Which artifact best proves execution of a binary on a Windows host?",
-    category: "Digital Forensics",
-    difficulty: "Hard",
-    marks: 20,
-    status: "Published",
-    options: ["Prefetch", "MFT", "Recycle Bin", "Event ID 4624"],
-    correct: 0,
-  },
-  {
-    id: "6",
-    question: "A URL uses punycode 'xn--pple-43d.com'. What technique is this?",
-    category: "Phishing",
-    difficulty: "Medium",
-    marks: 15,
-    status: "Published",
-    options: ["Typosquatting", "Homograph attack", "Open redirect", "Clickjacking"],
-    correct: 1,
-  },
-];
-
 const CATEGORY_FILTERS: ("All" | Category)[] = ["All", ...CATEGORIES];
 
+function getAdminToken(): string {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return "";
+  return (
+    localStorage.getItem("admin_access_token") ||
+    localStorage.getItem("access_token") ||
+    ""
+  );
+}
+
 function AdminQuestions() {
-  const [questions, setQuestions] = useState<Question[]>(seed);
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [query, setQuery] = useState("");
   const [catFilter, setCatFilter] = useState<"All" | Category>("All");
   const [showAdd, setShowAdd] = useState(false);
@@ -123,30 +68,41 @@ function AdminQuestions() {
   const [isImporting, setIsImporting] = useState(false);
   const [importSummary, setImportSummary] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
 
-  useEffect(() => {
-    fetch("/api/v1/admin/questions/")
-      .then((res) => res.json())
+  const loadQuestions = () => {
+    const token = getAdminToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    fetch("/api/v1/admin/questions/", { headers })
+      .then((res) => {
+        if (res.status === 401 && token) {
+          return fetch("/api/v1/admin/questions/").then((r) => r.json());
+        }
+        return res.json();
+      })
       .then((resData) => {
-        if (resData && (resData.success || resData.results)) {
-          const list = resData.data?.results || resData.results || resData.data;
-          if (Array.isArray(list) && list.length > 0) {
-            setQuestions(
-              list.map((q: any) => ({
-                id: String(q.id),
-                question: q.question_text || q.question || "Question prompt",
-                category: (q.category as Category) || "Phishing",
-                difficulty: (q.difficulty as Difficulty) || "Easy",
-                marks: q.default_points || q.marks || 10,
-                status: (q.status as Status) || "Published",
-                options: q.options_json || q.options || ["Option A", "Option B"],
-                correct: q.correct_option_index ?? q.correct ?? 0,
-                explanation: q.explanation || "",
-              }))
-            );
-          }
+        const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
+        if (Array.isArray(list)) {
+          setQuestions(
+            list.map((q: any) => ({
+              id: String(q.id),
+              question: q.question_text || q.prompt || q.question || "Question prompt",
+              category: (q.category as Category) || "Phishing",
+              difficulty: (q.difficulty as Difficulty) || "Easy",
+              marks: q.default_points || q.marks || 10,
+              status: (q.status as Status) || "Published",
+              options: q.options_json || q.options || ["Option A", "Option B"],
+              correct: q.correct_option_index ?? q.correct ?? 0,
+              explanation: q.explanation || "",
+            }))
+          );
         }
       })
-      .catch(() => {});
+      .catch((err) => console.error("Error fetching questions:", err));
+  };
+
+  useEffect(() => {
+    loadQuestions();
   }, []);
 
   const filtered = useMemo(() => {
@@ -160,23 +116,33 @@ function AdminQuestions() {
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this question?")) {
-      fetch(`/api/v1/admin/questions/${id}/`, { method: "DELETE" }).catch(() => {});
-      setQuestions((prev) => prev.filter((q) => q.id !== id));
+      fetch(`/api/v1/admin/questions/${id}/`, { method: "DELETE" })
+        .then(() => loadQuestions())
+        .catch(() => loadQuestions());
     }
   };
 
   const handleDuplicate = (id: string) => {
-    setQuestions((prev) => {
-      const src = prev.find((q) => q.id === id);
-      if (!src) return prev;
-      const dup: Question = { ...src, id: `${Date.now()}`, question: `${src.question} (Copy)`, status: "Draft" };
-      fetch("/api/v1/admin/questions/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(dup),
-      }).catch(() => {});
-      return [dup, ...prev];
-    });
+    const src = questions.find((q) => q.id === id);
+    if (!src) return;
+    fetch("/api/v1/admin/questions/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question_text: `${src.question} (Copy)`,
+        category: src.category,
+        difficulty: src.difficulty,
+        kind: "mcq",
+        default_points: src.marks,
+        status: "Draft",
+        options_json: src.options,
+        correct_option_index: src.correct,
+        explanation: src.explanation,
+      }),
+    })
+      .then((res) => res.json())
+      .then(() => loadQuestions())
+      .catch((err) => console.error("Error duplicating question:", err));
   };
 
   const handleAdd = (q: Question) => {
@@ -187,18 +153,38 @@ function AdminQuestions() {
         question_text: q.question,
         category: q.category,
         difficulty: q.difficulty,
+        kind: "mcq",
         default_points: q.marks,
         status: q.status,
         options_json: q.options,
         correct_option_index: q.correct,
         explanation: q.explanation,
       }),
-    }).catch(() => {});
-    setQuestions((prev) => [q, ...prev]);
+    })
+      .then((res) => res.json())
+      .then(() => loadQuestions())
+      .catch((err) => console.error("Error creating question:", err));
   };
 
   const handleUpdate = (updated: Question) => {
-    setQuestions((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
+    fetch(`/api/v1/admin/questions/${updated.id}/`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question_text: updated.question,
+        category: updated.category,
+        difficulty: updated.difficulty,
+        kind: "mcq",
+        default_points: updated.marks,
+        status: updated.status,
+        options_json: updated.options,
+        correct_option_index: updated.correct,
+        explanation: updated.explanation,
+      }),
+    })
+      .then((res) => res.json())
+      .then(() => loadQuestions())
+      .catch(() => loadQuestions());
     setEditingQuestion(null);
   };
 

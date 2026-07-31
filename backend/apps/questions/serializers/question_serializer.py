@@ -6,6 +6,8 @@ class AdminQuestionSerializer(serializers.ModelSerializer):
     """
     Complete Question Serializer for Admin portal (includes correct answer & explanation).
     """
+    kind = serializers.CharField(required=False, default="mcq")
+
     class Meta:
         model = Question
         fields = [
@@ -25,6 +27,13 @@ class AdminQuestionSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_kind(self, value):
+        if value:
+            val = str(value).lower()
+            if val in ["mcq", "text"]:
+                return val
+        return "mcq"
 
 
 class PublicQuestionSerializer(serializers.ModelSerializer):

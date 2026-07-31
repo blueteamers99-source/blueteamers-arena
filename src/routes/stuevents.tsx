@@ -15,8 +15,26 @@ import {
   Sparkles,
 } from "lucide-react";
 import { ACCENT_CLASSES, getSelectedEvent, type MockEvent } from "@/lib/mock-events";
-import { seedEvents, type EventRow, type EventStatus } from "./admin.events";
-import { Navbar } from "@/components/Navbar";
+
+type EventStatus = "Live" | "Upcoming" | "Completed";
+
+type EventRow = {
+  id: string;
+  name: string;
+  college: string;
+  code: string;
+  participants: number;
+  status: EventStatus;
+  date: string;
+};
+
+function normalizeStatus(raw: string | undefined | null): EventStatus {
+  if (!raw) return "Upcoming";
+  const s = raw.trim().toLowerCase();
+  if (s === "live") return "Live";
+  if (s === "completed" || s === "closed" || s === "finished") return "Completed";
+  return "Upcoming";
+}
 
 export const Route = createFileRoute("/stuevents")({
   component: StuEvents,
@@ -32,13 +50,37 @@ export const Route = createFileRoute("/stuevents")({
 
 export default function StuEvents() {
   const [ev, setEv] = useState<MockEvent | null>(null);
-  const [events] = useState<EventRow[]>(seedEvents);
+  const [events, setEvents] = useState<EventRow[]>([]);
   const [selected, setSelected] = useState<EventRow | null>(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("All");
 
   useEffect(() => {
     setEv(getSelectedEvent());
+    fetch("/api/v1/events/")
+      .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+      .then((data) => {
+        let list: any[] = [];
+        if (Array.isArray(data)) list = data;
+        else if (Array.isArray(data.results)) list = data.results;
+        else if (data.data) {
+          const d = data.data;
+          if (Array.isArray(d)) list = d;
+          else if (Array.isArray(d.results)) list = d.results;
+        }
+        setEvents(
+          list.map((e: any) => ({
+            id: String(e.id ?? Math.random()),
+            name: String(e.name || e.workshop_name || "Workshop"),
+            college: String(e.college_name || e.college || "—"),
+            code: String(e.event_code || e.code || "—"),
+            participants: Number(e.enrolled_participants ?? e.participants_count ?? e.participants ?? 0),
+            status: normalizeStatus(e.status),
+            date: String(e.event_date || e.date || "—"),
+          }))
+        );
+      })
+      .catch(() => setEvents([]));
   }, []);
 
   const filteredEvents = useMemo(() => {

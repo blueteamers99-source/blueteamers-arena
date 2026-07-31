@@ -14,6 +14,7 @@ class Event(BaseModel):
 
     college_name = models.CharField(max_length=150, db_index=True)
     workshop_name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
     event_code = models.CharField(max_length=50, unique=True, db_index=True)
     event_date = models.DateField()
     duration_minutes = models.PositiveIntegerField(default=60)
@@ -26,6 +27,12 @@ class Event(BaseModel):
         default=StatusChoices.UPCOMING,
         db_index=True,
     )
+    banner_image = models.CharField(max_length=500, blank=True, null=True, default="")
+    banner_image_url = models.CharField(max_length=500, blank=True, null=True, default="")
+    auto_publish = models.BooleanField(default=True)
+    auto_close = models.BooleanField(default=True)
+    registration_open_at = models.DateTimeField(blank=True, null=True)
+    registration_close_at = models.DateTimeField(blank=True, null=True)
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,

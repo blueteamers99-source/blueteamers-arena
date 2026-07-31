@@ -24,10 +24,11 @@ from apps.submissions.serializers.submission_serializer import (
 class ChallengeViewSet(viewsets.ModelViewSet):
     queryset = Challenge.objects.all()
     lookup_field = "slug"
+    lookup_value_regex = "[^/]+"
     authentication_classes = [ParticipantTokenAuthentication]
 
     def get_permissions(self):
-        if self.action in ["list", "retrieve", "evidence"]:
+        if self.action in ["list", "retrieve", "evidence", "submit"]:
             return [AllowAny()]
         return [IsAdmin()]
 

@@ -39,6 +39,7 @@ urlpatterns = [
     # Student Auth Flow
     path("auth/signup/", StudentSignupView.as_view(), name="student-signup"),
     path("auth/login/", StudentLoginView.as_view(), name="student-login"),
+    path("auth/login/", StudentLoginView.as_view(), name="auth-login"),
     path("auth/google/", StudentGoogleAuthView.as_view(), name="student-google"),
     path("auth/me/", UserProfileView.as_view(), name="auth-me"),
     path("auth/profile/", StudentProfileUpdateView.as_view(), name="student-profile"),

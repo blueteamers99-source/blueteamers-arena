@@ -20,14 +20,13 @@ class EventService:
     def create_event(data: Dict[str, Any], user=None) -> Event:
         code = data.get("event_code")
         college = data.get("college_name", "")
-        if not code:
+        if not code or Event.objects.filter(event_code__iexact=str(code).strip()).exists():
             code = EventService.generate_event_code(college)
-        elif Event.objects.filter(event_code__iexact=code.strip()).exists():
-            raise ValidationError({"event_code": ["An event with this code already exists."]})
 
         event = Event.objects.create(
             college_name=college,
             workshop_name=data.get("workshop_name", ""),
+            description=data.get("description", ""),
             event_code=code.upper(),
             event_date=data.get("event_date"),
             duration_minutes=data.get("duration_minutes", 60),
@@ -35,6 +34,10 @@ class EventService:
             total_challenges=data.get("total_challenges", 5),
             accent_color=data.get("accent_color", "blue"),
             status=data.get("status", Event.StatusChoices.UPCOMING),
+            banner_image=data.get("banner_image", ""),
+            banner_image_url=data.get("banner_image_url", ""),
+            registration_open_at=data.get("registration_open_at"),
+            registration_close_at=data.get("registration_close_at"),
             created_by=user,
         )
         return event

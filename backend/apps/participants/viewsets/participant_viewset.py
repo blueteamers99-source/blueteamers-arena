@@ -16,7 +16,7 @@ class ParticipantViewSet(viewsets.ModelViewSet):
     serializer_class = ParticipantSerializer
 
     def get_permissions(self):
-        if self.action in ["create", "register_student"]:
+        if self.action in ["list", "retrieve", "create", "register_student"]:
             return [AllowAny()]
         return [IsAdmin()]
 
@@ -24,6 +24,22 @@ class ParticipantViewSet(viewsets.ModelViewSet):
         event_id = self.request.query_params.get("event_id")
         search_query = self.request.query_params.get("search")
         return ParticipantSelector.filter_participants(event_id=event_id, query=search_query)
+
+    def perform_create(self, serializer):
+        if "event" not in serializer.validated_data or not serializer.validated_data.get("event"):
+            from apps.events.models.event import Event
+            event = Event.objects.filter(status="Live").first() or Event.objects.first()
+            if not event:
+                event = Event.objects.create(
+                    college_name="CBIT",
+                    workshop_name="SOC Cyber Defense",
+                    event_code="CBIT2026",
+                    event_date="2026-08-01",
+                    status="Live",
+                )
+            serializer.save(event=event)
+        else:
+            serializer.save()
 
     @extend_schema(request=RegisterStudentSerializer, responses={201: ParticipantSerializer})
     @action(detail=False, methods=["post"], url_path="register-student", permission_classes=[AllowAny])
