@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Shield, ArrowRight, Loader2 } from "lucide-react";
 import { setAdminAuth } from "@/lib/auth";
+import { API_BASE_URL } from "@/lib/config";
 
 interface AdminPortalLoginProps {
   onSuccess?: () => void;
@@ -20,7 +21,7 @@ export function AdminPortalLogin({ onSuccess }: AdminPortalLoginProps) {
     const loginInput = username.trim() || "admin@blueteamers.io";
 
     try {
-      const res = await fetch("/api/v1/admin/login/", {
+      const res = await fetch(`${API_BASE_URL}/admin/login/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

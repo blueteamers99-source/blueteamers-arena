@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { ACCENT_CLASSES, getSelectedEvent, type MockEvent } from "@/lib/mock-events";
 import { Navbar } from "@/components/Navbar";
+import { API_BASE_URL } from "@/lib/config";
 
 type EventStatus = "Live" | "Upcoming" | "Completed";
 
@@ -58,7 +59,7 @@ export default function StuEvents() {
 
   useEffect(() => {
     setEv(getSelectedEvent());
-    fetch("/api/v1/events/")
+    fetch(`${API_BASE_URL}/events/`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
       .then((data) => {
         let list: any[] = [];

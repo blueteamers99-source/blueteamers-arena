@@ -13,6 +13,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { AdminLayout } from "../components/admin/AdminLayout";
+import { API_BASE_URL } from "@/lib/config";
 
 export const Route = createFileRoute("/admin/settings")({
   component: AdminSettings,
@@ -44,10 +45,10 @@ function AdminSettings() {
   const [systemStatus, setSystemStatus] = useState("Checking...");
 
   useEffect(() => {
-    fetch("/api/health/")
+    fetch(`${API_BASE_URL}/admin/dashboard/`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.success || data.status === "healthy") {
+        if (data.success || data.data) {
           setSystemStatus("Healthy & Operational");
         } else {
           setSystemStatus("Degraded Performance");
@@ -68,7 +69,7 @@ function AdminSettings() {
       setPasswordMsg("New passwords do not match!");
       return;
     }
-    fetch("/api/v1/auth/change-password/", {
+    fetch(`${API_BASE_URL}/auth/change-password/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),

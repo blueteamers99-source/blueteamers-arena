@@ -15,13 +15,14 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { AdminLayout } from "../components/admin/AdminLayout";
+import { API_BASE_URL } from "@/lib/config";
 
 export const Route = createFileRoute("/admin/questions")({
-  component: AdminQuestions,
+  component: QuestionBank,
   head: () => ({
     meta: [
       { title: "Question Bank — Blueteamers Arena Admin" },
-      { name: "description", content: "Manage the question bank across phishing, SIEM, AI, incident response, and digital forensics." },
+      { name: "description", content: "Manage SOC CTF questions across Phishing, SIEM, AI, Incident Response, and Digital Forensics." },
     ],
   }),
 });
@@ -33,7 +34,6 @@ type Status = "Published" | "Draft";
 type Question = {
   id: string;
   question: string;
-  evidence?: string;
   category: Category;
   difficulty: Difficulty;
   marks: number;
@@ -43,9 +43,16 @@ type Question = {
   explanation?: string;
 };
 
-const CATEGORIES: Category[] = ["Phishing", "SIEM", "AI", "Incident Response", "Digital Forensics"];
+const CATEGORIES: ("All" | Category)[] = [
+  "All",
+  "Phishing",
+  "SIEM",
+  "AI",
+  "Incident Response",
+  "Digital Forensics",
+];
 
-const CATEGORY_FILTERS: ("All" | Category)[] = ["All", ...CATEGORIES];
+const CATEGORY_FILTERS = CATEGORIES;
 
 function getAdminToken(): string {
   if (typeof window === "undefined" || typeof localStorage === "undefined") return "";
@@ -56,7 +63,7 @@ function getAdminToken(): string {
   );
 }
 
-function AdminQuestions() {
+function QuestionBank() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [query, setQuery] = useState("");
   const [catFilter, setCatFilter] = useState<"All" | Category>("All");
@@ -73,10 +80,10 @@ function AdminQuestions() {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    fetch("/api/v1/admin/questions/", { headers })
+    fetch(`${API_BASE_URL}/admin/questions/`, { headers })
       .then((res) => {
         if (res.status === 401 && token) {
-          return fetch("/api/v1/admin/questions/").then((r) => r.json());
+          return fetch(`${API_BASE_URL}/admin/questions/`).then((r) => r.json());
         }
         return res.json();
       })
@@ -116,7 +123,7 @@ function AdminQuestions() {
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this question?")) {
-      fetch(`/api/v1/admin/questions/${id}/`, { method: "DELETE" })
+      fetch(`${API_BASE_URL}/admin/questions/${id}/`, { method: "DELETE" })
         .then(() => loadQuestions())
         .catch(() => loadQuestions());
     }
@@ -125,7 +132,7 @@ function AdminQuestions() {
   const handleDuplicate = (id: string) => {
     const src = questions.find((q) => q.id === id);
     if (!src) return;
-    fetch("/api/v1/admin/questions/", {
+    fetch(`${API_BASE_URL}/admin/questions/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -146,7 +153,7 @@ function AdminQuestions() {
   };
 
   const handleAdd = (q: Question) => {
-    fetch("/api/v1/admin/questions/", {
+    fetch(`${API_BASE_URL}/admin/questions/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -167,7 +174,7 @@ function AdminQuestions() {
   };
 
   const handleUpdate = (updated: Question) => {
-    fetch(`/api/v1/admin/questions/${updated.id}/`, {
+    fetch(`${API_BASE_URL}/admin/questions/${updated.id}/`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -203,7 +210,7 @@ function AdminQuestions() {
     formData.append("file", file);
 
     try {
-      const res = await fetch("/api/v1/admin/questions/import/", {
+      const res = await fetch(`${API_BASE_URL}/admin/questions/import/`, {
         method: "POST",
         body: formData,
       });

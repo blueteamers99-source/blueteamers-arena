@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Lock, ArrowRight, CheckCircle, Loader2 } from "lucide-react";
+import { API_BASE_URL } from "@/lib/config";
 
 export const Route = createFileRoute("/reset-password")({
   component: StudentResetPassword,
@@ -22,7 +23,7 @@ function StudentResetPassword() {
     setLoading(true);
 
     try {
-      await fetch("/api/v1/auth/reset-password/", {
+      await fetch(`${API_BASE_URL}/auth/reset-password/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ new_password: newPassword }),

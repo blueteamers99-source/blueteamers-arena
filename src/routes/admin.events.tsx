@@ -18,13 +18,15 @@ import {
   RefreshCw,
   Radio,
 } from "lucide-react";
+import { API_BASE_URL } from "@/lib/config";
+import { AdminLayout } from "../components/admin/AdminLayout";
 
 export const Route = createFileRoute("/admin/events")({
-  component: AdminEvents,
+  component: AdminEventsPage,
   head: () => ({
     meta: [
-      { title: "Events — Blueteamers Arena Admin" },
-      { name: "description", content: "Manage workshop and CTF events." },
+      { title: "Manage Events — Blueteamers Arena Admin" },
+      { name: "description", content: "Create, view, and manage workshop CTF events." },
     ],
   }),
 });
@@ -51,31 +53,27 @@ const navItems = [
   { title: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
-function normalizeStatus(raw: string | undefined | null): EventStatus {
-  if (!raw) return "Upcoming";
-  const s = raw.trim().toLowerCase();
-  if (s === "live") return "Live";
-  if (s === "completed" || s === "closed" || s === "finished") return "Completed";
+function normalizeStatus(st: string): EventStatus {
+  if (!st) return "Upcoming";
+  const s = st.toLowerCase();
+  if (s === "live" || s === "active") return "Live";
+  if (s === "completed" || s === "archived") return "Completed";
   return "Upcoming";
 }
 
 const STATUS_FILTERS: ("All" | EventStatus)[] = ["All", "Live", "Upcoming", "Completed"];
 
-function getAdminToken(): string {
-  if (typeof window === "undefined" || typeof localStorage === "undefined") return "";
-  return (
-    localStorage.getItem("admin_access_token") ||
-    localStorage.getItem("access_token") ||
-    ""
-  );
+function getAdminToken(): string | null {
+  if (typeof localStorage === "undefined") return null;
+  return localStorage.getItem("admin_access_token") || localStorage.getItem("student_access_token");
 }
 
-function AdminEvents() {
+function AdminEventsPage() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"All" | EventStatus>("All");
+  const [statusFilter, setStatusFilter] = useState<string>("All");
   const [showCreate, setShowCreate] = useState(false);
   const [viewingEvent, setViewingEvent] = useState<EventRow | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventRow | null>(null);
@@ -85,10 +83,10 @@ function AdminEvents() {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    fetch("/api/v1/events/", { headers })
+    fetch(`${API_BASE_URL}/events/`, { headers })
       .then((res) => {
         if (res.status === 401 && token) {
-          return fetch("/api/v1/events/").then((r) => r.json());
+          return fetch(`${API_BASE_URL}/events/`).then((r) => r.json());
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -151,7 +149,7 @@ function AdminEvents() {
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      fetch(`/api/v1/events/${id}/`, {
+      fetch(`${API_BASE_URL}/events/${id}/`, {
         method: "DELETE",
         headers,
       })
@@ -168,7 +166,7 @@ function AdminEvents() {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    fetch("/api/v1/events/", {
+    fetch(`${API_BASE_URL}/events/`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -191,7 +189,7 @@ function AdminEvents() {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    fetch(`/api/v1/events/${row.id}/`, {
+    fetch(`${API_BASE_URL}/events/${row.id}/`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ status: nextStatus }),
@@ -227,14 +225,14 @@ function AdminEvents() {
       description: formData.description || "",
     };
 
-    fetch("/api/v1/events/", {
+    fetch(`${API_BASE_URL}/events/`, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
     })
       .then((res) => {
         if (res.status === 401 && token) {
-          return fetch("/api/v1/events/", {
+          return fetch(`${API_BASE_URL}/events/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
@@ -266,7 +264,7 @@ function AdminEvents() {
       description: updated.description || "",
     };
 
-    fetch(`/api/v1/events/${updated.id}/`, {
+    fetch(`${API_BASE_URL}/events/${updated.id}/`, {
       method: "PUT",
       headers,
       body: JSON.stringify(body),

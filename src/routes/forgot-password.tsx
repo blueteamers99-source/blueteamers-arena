@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowLeft, CheckCircle, Mail, AlertCircle, Loader2 } from "lucide-react";
+import { API_BASE_URL } from "@/lib/config";
 
 export const Route = createFileRoute("/forgot-password")({
   component: ForgotPassword,
@@ -24,7 +25,7 @@ function ForgotPassword() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/v1/auth/forgot-password/", {
+      const res = await fetch(`${API_BASE_URL}/auth/forgot-password/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),

@@ -14,6 +14,7 @@ import {
   Filter,
 } from "lucide-react";
 import { AdminLayout } from "../components/admin/AdminLayout";
+import { API_BASE_URL } from "@/lib/config";
 
 type AdminDashboardSearch = {
   tab?: string;
@@ -63,7 +64,7 @@ function AdminDashboard() {
   }, [search.tab]);
 
   useEffect(() => {
-    fetch("/api/v1/admin/dashboard/")
+    fetch(`${API_BASE_URL}/admin/dashboard/`)
       .then((res) => res.json())
       .then((resData) => {
         if (resData && (resData.data || resData.success)) {
@@ -81,7 +82,7 @@ function AdminDashboard() {
       })
       .catch((err) => console.error("Error fetching admin dashboard stats:", err));
 
-    fetch("/api/v1/leaderboard/")
+    fetch(`${API_BASE_URL}/leaderboard/`)
       .then((res) => res.json())
       .then((resData) => {
         const list = resData.data?.leaderboard || resData.leaderboard || resData.results || resData.data || (Array.isArray(resData) ? resData : []);

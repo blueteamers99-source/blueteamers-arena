@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { Navbar } from "@/components/Navbar";
+import { API_BASE_URL } from "@/lib/config";
 
 export const Route = createFileRoute("/leaderboard")({
   component: Leaderboard,
@@ -35,7 +36,7 @@ function Leaderboard() {
   const [leaderboardItems, setLeaderboardItems] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("/api/v1/leaderboard/")
+    fetch(`${API_BASE_URL}/leaderboard/`)
       .then((res) => res.json())
       .then((resData) => {
         const list = resData.data?.leaderboard || resData.leaderboard || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
