@@ -9,6 +9,7 @@ v1_urls = [
     path("", include(router.urls)),
     path("", include("apps.accounts.urls")),
     path("", include("apps.events.urls")),
+    path("admin/", include("apps.events.urls")),
     path("", include("apps.participants.urls")),
     path("", include("apps.questions.urls")),
     path("", include("apps.challenges.urls")),
@@ -21,6 +22,6 @@ v1_urls = [
 urlpatterns = [
     path("", include(router.urls)),
     path("v1/", include(v1_urls)),
-    path("v2/", include(v1_urls)),  # v2 namespace pointing to current stable endpoints
-    path("", include(v1_urls)),     # Root fallback for backwards compatibility
+    path("v2/", include(v1_urls)),
+    path("", include(v1_urls)),
 ]

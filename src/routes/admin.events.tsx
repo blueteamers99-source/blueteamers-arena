@@ -158,6 +158,22 @@ function AdminEventsPage() {
     }
   };
 
+  const handleRegenerateCode = (id: string) => {
+    if (confirm("Regenerate event code? A new unique code will be assigned.")) {
+      const token = getAdminToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      fetch(`${API_BASE_URL}/events/${id}/regenerate-code/`, {
+        method: "POST",
+        headers,
+      })
+        .then((res) => res.json())
+        .then(() => fetchEvents())
+        .catch(() => fetchEvents());
+    }
+  };
+
   const handleDuplicate = (id: string) => {
     const src = events.find((e) => e.id === id);
     if (!src) return;
