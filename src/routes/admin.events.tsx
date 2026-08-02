@@ -594,7 +594,7 @@ function EditEventModal({
             <input required value={workshop} onChange={(e) => setWorkshop(e.target.value)} className={inputCls} />
           </Field>
           <Field label="Date">
-            <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+            <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${inputCls} [color-scheme:dark] [&&::-webkit-calendar-picker-indicator]:invert [&&::-webkit-calendar-picker-indicator]:opacity-100 cursor-pointer`} />
           </Field>
           <Field label="Status">
             <select
@@ -724,7 +724,7 @@ function CreateEventModal({
             <input required value={workshop} onChange={(e) => setWorkshop(e.target.value)} className={inputCls} placeholder="AI with SOC" />
           </Field>
           <Field label="Date">
-            <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+            <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${inputCls} [color-scheme:dark] [&&::-webkit-calendar-picker-indicator]:invert [&&::-webkit-calendar-picker-indicator]:opacity-100 cursor-pointer`} />
           </Field>
           <Field label="Status">
             <select
@@ -800,7 +800,7 @@ function CreateEventModal({
 }
 
 const inputCls =
-  "w-full rounded-xl border border-border/80 bg-background/80 px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 shadow-xs hover:border-border/100";
+  "w-full rounded-xl border border-border/80 bg-background/80 px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 shadow-xs hover:border-border/100 [color-scheme:dark]";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
