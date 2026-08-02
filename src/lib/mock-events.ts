@@ -58,12 +58,31 @@ const KEY = "arena.selectedEventCode";
 const NAME_KEY = "arena.studentName";
 
 export function saveSelectedEvent(code: string) {
-  if (typeof window !== "undefined") sessionStorage.setItem(KEY, code);
+  if (typeof window !== "undefined") {
+    sessionStorage.setItem(KEY, code);
+    localStorage.setItem(KEY, code);
+  }
 }
 
 export function getSelectedEvent(): MockEvent {
   if (typeof window === "undefined") return EVENTS.CBIT2026;
-  const code = sessionStorage.getItem(KEY) ?? "CBIT2026";
+  const rawData = localStorage.getItem("selected_event_data");
+  if (rawData) {
+    try {
+      const parsed = JSON.parse(rawData);
+      return {
+        code: parsed.event_code || "CBIT2026",
+        college: parsed.college || "CBIT",
+        workshop: parsed.title || "AI with SOC Workshop",
+        participants: 180,
+        accent: "blue",
+        date: parsed.event_date || "22 July 2026",
+        duration: "60 Minutes",
+        challenges: 20,
+      };
+    } catch (e) {}
+  }
+  const code = (sessionStorage.getItem(KEY) || localStorage.getItem(KEY) || "CBIT2026").toUpperCase().replace(/[^A-Z0-9]/g, "");
   return EVENTS[code] ?? EVENTS.CBIT2026;
 }
 
