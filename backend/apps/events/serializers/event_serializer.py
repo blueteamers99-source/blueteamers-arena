@@ -27,7 +27,7 @@ class EventSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "participants_count", "created_at", "updated_at"]
+        read_only_fields = ["id", "event_code", "participants_count", "created_at", "updated_at"]
 
     def get_participants_count(self, obj) -> int:
         if hasattr(obj, "participants"):
@@ -36,4 +36,12 @@ class EventSerializer(serializers.ModelSerializer):
 
 
 class VerifyEventCodeSerializer(serializers.Serializer):
-    code = serializers.CharField(required=True)
+    event_code = serializers.CharField(required=False, allow_blank=True)
+    code = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        event_code = attrs.get("event_code") or attrs.get("code")
+        if not event_code:
+            raise serializers.ValidationError({"event_code": "Event code is required."})
+        attrs["event_code"] = str(event_code).strip()
+        return attrs

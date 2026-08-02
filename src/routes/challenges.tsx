@@ -34,6 +34,7 @@ import {
 } from "@/lib/mock-challenges";
 
 import { Navbar } from "@/components/Navbar";
+import { API_BASE_URL } from "@/lib/config";
 
 export const Route = createFileRoute("/challenges")({
   component: ChallengesPage,
@@ -55,7 +56,7 @@ function ChallengesPage() {
   const [filterDifficulty, setFilterDifficulty] = useState<string>("All");
 
   useEffect(() => {
-    fetch("/api/v1/challenges/")
+    fetch(`${API_BASE_URL}/challenges/`)
       .then((res) => res.json())
       .then((resData) => {
         const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);

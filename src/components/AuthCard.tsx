@@ -14,6 +14,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { setStudentAuth } from "@/lib/auth";
+import { API_BASE_URL } from "@/lib/config";
 import "./AuthCard.css";
 
 interface AuthCardProps {
@@ -69,7 +70,7 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
     setLoginLoading(true);
 
     try {
-      const res = await fetch("/api/v1/auth/login/", {
+      const res = await fetch(`${API_BASE_URL}/auth/login/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier, password: loginPassword, remember_me: rememberMe }),
@@ -123,7 +124,7 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
     setSignupLoading(true);
 
     try {
-      const res = await fetch("/api/v1/auth/signup/", {
+      const res = await fetch(`${API_BASE_URL}/auth/signup/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

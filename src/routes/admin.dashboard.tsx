@@ -14,6 +14,7 @@ import {
   Filter,
 } from "lucide-react";
 import { AdminLayout } from "../components/admin/AdminLayout";
+import { API_BASE_URL } from "@/lib/config";
 
 type AdminDashboardSearch = {
   tab?: string;
@@ -63,16 +64,17 @@ function AdminDashboard() {
   }, [search.tab]);
 
   useEffect(() => {
-    fetch("/api/v1/admin/dashboard/")
+    fetch(`${API_BASE_URL}/admin/dashboard/`)
       .then((res) => res.json())
       .then((resData) => {
         if (resData && (resData.data || resData.success)) {
           const d = resData.data || resData;
+          const s = d.summary || d;
           setDashStats({
-            total_events: d.total_events || 0,
-            active_events: d.active_events || 0,
-            total_participants: d.total_participants || 0,
-            total_questions: d.total_questions || 0,
+            total_events: s.total_events ?? d.total_events ?? 0,
+            active_events: s.live_events ?? s.active_events ?? d.active_events ?? 0,
+            total_participants: s.total_participants ?? d.total_participants ?? 0,
+            total_questions: s.total_questions ?? d.total_questions ?? 0,
             recent_events: Array.isArray(d.recent_events) ? d.recent_events : [],
             recent_activity: Array.isArray(d.recent_activity) ? d.recent_activity : [],
           });
@@ -80,7 +82,7 @@ function AdminDashboard() {
       })
       .catch((err) => console.error("Error fetching admin dashboard stats:", err));
 
-    fetch("/api/v1/leaderboard/")
+    fetch(`${API_BASE_URL}/leaderboard/`)
       .then((res) => res.json())
       .then((resData) => {
         const list = resData.data?.leaderboard || resData.leaderboard || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
@@ -100,10 +102,10 @@ function AdminDashboard() {
 
   const recentEvents = dashStats.recent_events.length > 0
     ? dashStats.recent_events.map((e: any) => ({
-        event: e.title || e.name || "CTF Event",
+        event: e.workshop_name || e.title || e.name || "CTF Event",
         college: e.college_name || "College",
-        participants: e.enrolled_participants || e.participants_count || 0,
-        status: e.is_active ? "Live" : "Completed",
+        participants: e.enrolled_participants ?? e.participants_count ?? 0,
+        status: e.status || (e.is_active ? "Live" : "Completed"),
         date: e.event_date || "2026-08-01",
       }))
     : [];

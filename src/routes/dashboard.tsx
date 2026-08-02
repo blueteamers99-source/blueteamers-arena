@@ -26,6 +26,7 @@ import {
   Calendar,
 } from "lucide-react";
 import StuEvents from "./stuevents";
+import { API_BASE_URL } from "@/lib/config";
 import {
   ACCENT_CLASSES,
   getSelectedEvent,
@@ -110,7 +111,7 @@ function Dashboard() {
 
   useEffect(() => {
     setEv(getSelectedEvent());
-    fetch("/api/v1/dashboard/")
+    fetch(`${API_BASE_URL}/dashboard/`)
       .then((res) => res.json())
       .then((resData) => {
         if (resData && (resData.data || resData.success)) {
@@ -122,7 +123,7 @@ function Dashboard() {
       })
       .catch((err) => console.error("Error fetching student dashboard:", err));
 
-    fetch("/api/v1/challenges/")
+    fetch(`${API_BASE_URL}/challenges/`)
       .then((res) => res.json())
       .then((resData) => {
         const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
@@ -132,7 +133,7 @@ function Dashboard() {
       })
       .catch(() => {});
 
-    fetch("/api/v1/leaderboard/")
+    fetch(`${API_BASE_URL}/leaderboard/`)
       .then((res) => res.json())
       .then((resData) => {
         const list = resData.data?.leaderboard || resData.leaderboard || resData.results || resData.data || (Array.isArray(resData) ? resData : []);

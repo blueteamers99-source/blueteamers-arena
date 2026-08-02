@@ -14,6 +14,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { AdminLayout } from "../components/admin/AdminLayout";
+import { API_BASE_URL } from "@/lib/config";
 
 export const Route = createFileRoute("/admin/participants")({
   component: AdminParticipants,
@@ -62,10 +63,10 @@ function AdminParticipants() {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    fetch("/api/v1/admin/participants/", { headers })
+    fetch(`${API_BASE_URL}/admin/participants/`, { headers })
       .then((res) => {
         if (res.status === 401 && token) {
-          return fetch("/api/v1/admin/participants/").then((r) => r.json());
+          return fetch(`${API_BASE_URL}/admin/participants/`).then((r) => r.json());
         }
         return res.json();
       })
@@ -105,7 +106,7 @@ function AdminParticipants() {
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this participant?")) {
-      fetch(`/api/v1/admin/participants/${id}/`, { method: "DELETE" })
+      fetch(`${API_BASE_URL}/admin/participants/${id}/`, { method: "DELETE" })
         .then(() => loadParticipants())
         .catch(() => {});
       setParticipants((prev) => prev.filter((p) => p.id !== id));
@@ -116,7 +117,7 @@ function AdminParticipants() {
     e.preventDefault();
     if (!newName || !newEmail) return;
 
-    fetch("/api/v1/admin/participants/", {
+    fetch(`${API_BASE_URL}/admin/participants/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -140,7 +141,7 @@ function AdminParticipants() {
     e.preventDefault();
     if (!editingParticipant) return;
 
-    fetch(`/api/v1/admin/participants/${editingParticipant.id}/`, {
+    fetch(`${API_BASE_URL}/admin/participants/${editingParticipant.id}/`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(editingParticipant),
@@ -151,7 +152,7 @@ function AdminParticipants() {
   };
 
   const handleExportCSV = () => {
-    fetch("/api/v1/admin/reports/export/", {
+    fetch(`${API_BASE_URL}/admin/reports/export/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ format: "csv" }),
