@@ -552,30 +552,30 @@ function EditEventModal({
       <form
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl space-y-6 p-6 sm:p-7 backdrop-blur-xl animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-border/80 bg-card shadow-2xl space-y-4 p-5 sm:p-6 backdrop-blur-xl animate-in zoom-in-95 duration-200"
       >
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/80 via-primary to-primary/40" />
 
-        <div className="flex items-start justify-between gap-4 pt-1">
+        <div className="flex items-start justify-between gap-4 pt-0.5">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 border border-primary/20 text-primary shadow-xs">
-              <Pencil className="h-5 w-5" />
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 border border-primary/20 text-primary shadow-xs">
+              <Pencil className="h-4.5 w-4.5" />
             </div>
             <div>
-              <h2 className="text-xl font-extrabold tracking-tight text-foreground">Edit Event</h2>
-              <p className="mt-0.5 text-xs font-medium text-muted-foreground">Update event details in PostgreSQL.</p>
+              <h2 className="text-lg font-extrabold tracking-tight text-foreground">Edit Event</h2>
+              <p className="text-[11px] font-medium text-muted-foreground">Update event details in PostgreSQL.</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors border border-transparent hover:border-border/60 cursor-pointer"
+            className="rounded-xl p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors border border-transparent hover:border-border/60 cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label="College">
             <input required value={college} onChange={(e) => setCollege(e.target.value)} className={inputCls} />
           </Field>
@@ -606,7 +606,7 @@ function EditEventModal({
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                rows={3}
+                rows={2}
                 className={inputCls}
                 placeholder="Event description..."
               />
@@ -614,17 +614,17 @@ function EditEventModal({
           </div>
         </div>
 
-        <div className="pt-3 border-t border-border/60 flex items-center justify-end gap-3">
+        <div className="pt-2 border-t border-border/60 flex items-center justify-end gap-2.5">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-border/80 px-5 py-2.5 text-sm font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-all cursor-pointer"
+            className="rounded-xl border border-border/80 px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-all cursor-pointer"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all cursor-pointer"
           >
             Save Changes
           </button>
@@ -682,30 +682,30 @@ function CreateEventModal({
       <form
         onSubmit={publish}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl space-y-6 p-6 sm:p-7 backdrop-blur-xl animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border/80 bg-card shadow-2xl space-y-4 p-5 sm:p-6 backdrop-blur-xl animate-in zoom-in-95 duration-200"
       >
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/80 via-primary to-primary/40" />
 
-        <div className="flex items-start justify-between gap-4 pt-1">
+        <div className="flex items-start justify-between gap-4 pt-0.5">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 border border-primary/20 text-primary shadow-xs">
-              <Plus className="h-5 w-5" />
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 border border-primary/20 text-primary shadow-xs">
+              <Plus className="h-4.5 w-4.5" />
             </div>
             <div>
-              <h2 className="text-xl font-extrabold tracking-tight text-foreground">Create Event</h2>
-              <p className="mt-0.5 text-xs font-medium text-muted-foreground">Configure a new workshop and publish it live.</p>
+              <h2 className="text-lg font-extrabold tracking-tight text-foreground">Create Event</h2>
+              <p className="text-[11px] font-medium text-muted-foreground">Configure a new workshop and publish it live.</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors border border-transparent hover:border-border/60 cursor-pointer"
+            className="rounded-xl p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors border border-transparent hover:border-border/60 cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label="College">
             <input required value={college} onChange={(e) => setCollege(e.target.value)} className={inputCls} placeholder="e.g. CBIT" />
           </Field>
@@ -738,7 +738,7 @@ function CreateEventModal({
             </Field>
           </div>
           <div className="sm:col-span-2">
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground/90">Event Code</label>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground/90">Event Code</label>
             <div className="flex gap-2">
               <input
                 value={code}
@@ -749,7 +749,7 @@ function CreateEventModal({
               <button
                 type="button"
                 onClick={() => setCode(generateCode(college))}
-                className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-border bg-accent/60 px-4 text-xs font-semibold text-foreground hover:bg-accent hover:border-primary/40 transition-all cursor-pointer"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-border bg-accent/60 px-3.5 text-xs font-semibold text-foreground hover:bg-accent hover:border-primary/40 transition-all cursor-pointer"
               >
                 <RefreshCw className="h-3.5 w-3.5" /> Generate
               </button>
@@ -760,7 +760,7 @@ function CreateEventModal({
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                rows={3}
+                rows={2}
                 className={inputCls}
                 placeholder="Provide event details, prerequisites, and scope..."
               />
@@ -768,17 +768,17 @@ function CreateEventModal({
           </div>
         </div>
 
-        <div className="pt-3 border-t border-border/60 flex items-center justify-end gap-3">
+        <div className="pt-2 border-t border-border/60 flex items-center justify-end gap-2.5">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-border/80 px-5 py-2.5 text-sm font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-all cursor-pointer"
+            className="rounded-xl border border-border/80 px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-all cursor-pointer"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all cursor-pointer"
           >
             Publish Event
           </button>
@@ -789,12 +789,12 @@ function CreateEventModal({
 }
 
 const inputCls =
-  "w-full rounded-xl border border-border/80 bg-background/80 px-3.5 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 shadow-xs hover:border-border/100";
+  "w-full rounded-xl border border-border/80 bg-background/80 px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 shadow-xs hover:border-border/100";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground/90">{label}</label>
+      <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground/90">{label}</label>
       {children}
     </div>
   );
