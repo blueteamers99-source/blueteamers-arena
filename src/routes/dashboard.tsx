@@ -306,7 +306,7 @@ function Dashboard() {
         </header>
 
         {/* Tab: Events */}
-        {activeTab === "Events" && <StuEvents />}
+        {activeTab === "Events" && <StuEvents hideNav />}
 
         {/* Tab 1: Dashboard Overview */}
         {activeTab === "Dashboard" && (

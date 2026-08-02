@@ -55,7 +55,7 @@ export const Route = createFileRoute("/stuevents")({
   }),
 });
 
-export default function StuEvents() {
+export default function StuEvents({ hideNav }: { hideNav?: boolean } = {}) {
   const navigate = useNavigate();
   const [ev, setEv] = useState<MockEvent>(() => getSelectedEvent());
   const [events, setEvents] = useState<EventRow[]>([]);
@@ -118,16 +118,13 @@ export default function StuEvents() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <Navbar />
+      {!hideNav && <Navbar />}
 
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
+      <div className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8 space-y-8">
         {/* Top Header & Enter Arena Code CTA */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-6">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              <Sparkles className="h-3.5 w-3.5" /> Official Competition Schedule
-            </div>
-            <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
               Blueteamers Arena Events
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -135,8 +132,8 @@ export default function StuEvents() {
             </p>
           </div>
           <button
-            onClick={() => setShowCodeModal(true)}
-            className="inline-flex items-center justify-center gap-2.5 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
+            onClick={() => navigate({ to: "/arena" })}
+            className="inline-flex items-center justify-center gap-2.5 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 cursor-pointer"
           >
             <KeyRound className="h-4.5 w-4.5" />
             Enter Event Code
@@ -247,7 +244,7 @@ export default function StuEvents() {
           onClose={() => setSelected(null)}
           onEnterCode={() => {
             setSelected(null);
-            setShowCodeModal(true);
+            navigate({ to: "/arena" });
           }}
         />
       )}
@@ -391,9 +388,6 @@ function EnterEventCodeModal({
                 autoFocus
               />
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              Accepts formats: <code className="text-primary font-mono font-semibold">CBIT-3154</code>, <code className="text-primary font-mono font-semibold">cbit3154</code>, <code className="text-primary font-mono font-semibold">cbit 3154</code>
-            </p>
           </div>
 
           {error && (
