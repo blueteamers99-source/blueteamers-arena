@@ -19,6 +19,7 @@ import {
   Radio,
 } from "lucide-react";
 import { AdminLayout } from "../components/admin/AdminLayout";
+import { API_BASE_URL } from "@/lib/config";
 
 export const Route = createFileRoute("/admin/events")({
   component: AdminEvents,
@@ -62,12 +63,12 @@ function normalizeStatus(raw: string | undefined | null): EventStatus {
 
 const STATUS_FILTERS: ("All" | EventStatus)[] = ["All", "Live", "Upcoming", "Completed"];
 
-function getAdminToken(): string {
-  if (typeof window === "undefined" || typeof localStorage === "undefined") return "";
+function getAdminToken(): string | null {
+  if (typeof localStorage === "undefined") return null;
   return (
     localStorage.getItem("admin_access_token") ||
-    localStorage.getItem("access_token") ||
-    ""
+    localStorage.getItem("student_access_token") ||
+    localStorage.getItem("access_token")
   );
 }
 
@@ -113,10 +114,10 @@ function AdminEvents() {
       setLoading(false);
     };
 
-    fetch("/api/v1/events/", { headers })
+    fetch(`${API_BASE_URL}/events/`, { headers })
       .then(async (res) => {
         if (!res.ok) {
-          const fallbackRes = await fetch("/api/v1/events/");
+          const fallbackRes = await fetch(`${API_BASE_URL}/events/`);
           if (!fallbackRes.ok) {
             throw new Error(`HTTP ${fallbackRes.status}`);
           }
@@ -126,7 +127,7 @@ function AdminEvents() {
       })
       .then((data) => processResponseData(data))
       .catch(() => {
-        fetch("/api/v1/events/")
+        fetch(`${API_BASE_URL}/events/`)
           .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
           .then((data) => processResponseData(data))
           .catch((finalErr) => {
@@ -162,7 +163,7 @@ function AdminEvents() {
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      fetch(`/api/v1/events/${id}/`, {
+      fetch(`${API_BASE_URL}/events/${id}/`, {
         method: "DELETE",
         headers,
       })
@@ -179,7 +180,7 @@ function AdminEvents() {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    fetch("/api/v1/events/", {
+    fetch(`${API_BASE_URL}/events/`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -202,7 +203,7 @@ function AdminEvents() {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    fetch(`/api/v1/events/${row.id}/`, {
+    fetch(`${API_BASE_URL}/events/${row.id}/`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ status: nextStatus }),
@@ -238,14 +239,14 @@ function AdminEvents() {
       description: formData.description || "",
     };
 
-    fetch("/api/v1/events/", {
+    fetch(`${API_BASE_URL}/events/`, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
     })
       .then((res) => {
         if (res.status === 401 && token) {
-          return fetch("/api/v1/events/", {
+          return fetch(`${API_BASE_URL}/events/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
@@ -277,7 +278,7 @@ function AdminEvents() {
       description: updated.description || "",
     };
 
-    fetch(`/api/v1/events/${updated.id}/`, {
+    fetch(`${API_BASE_URL}/events/${updated.id}/`, {
       method: "PUT",
       headers,
       body: JSON.stringify(body),
