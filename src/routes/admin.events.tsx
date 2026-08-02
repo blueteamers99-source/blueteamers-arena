@@ -86,44 +86,54 @@ function AdminEvents() {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
+    const processResponseData = (resData: any) => {
+      let list: any[] = [];
+      if (Array.isArray(resData)) {
+        list = resData;
+      } else if (Array.isArray(resData.results)) {
+        list = resData.results;
+      } else if (resData && resData.data) {
+        const d = resData.data;
+        if (Array.isArray(d)) list = d;
+        else if (Array.isArray(d.results)) list = d.results;
+      }
+      setEvents(
+        list.map((e: any) => ({
+          id: String(e.id ?? e.pk ?? Math.random()),
+          name: String(e.name || e.workshop_name || "CTF Workshop"),
+          college: String(e.college_name || e.college || "—"),
+          code: String(e.event_code || e.code || "—"),
+          participants: Number(e.enrolled_participants ?? e.participants_count ?? e.participants ?? 0),
+          status: normalizeStatus(e.status),
+          date: String(e.event_date || e.date || "—"),
+          description: String(e.description || ""),
+        }))
+      );
+      setError(null);
+      setLoading(false);
+    };
+
     fetch("/api/v1/events/", { headers })
-      .then((res) => {
-        if (res.status === 401 && token) {
-          return fetch("/api/v1/events/").then((r) => r.json());
+      .then(async (res) => {
+        if (!res.ok) {
+          const fallbackRes = await fetch("/api/v1/events/");
+          if (!fallbackRes.ok) {
+            throw new Error(`HTTP ${fallbackRes.status}`);
+          }
+          return fallbackRes.json();
         }
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
-      .then((resData) => {
-        let list: any[] = [];
-        if (Array.isArray(resData)) {
-          list = resData;
-        } else if (Array.isArray(resData.results)) {
-          list = resData.results;
-        } else if (resData.data) {
-          const d = resData.data;
-          if (Array.isArray(d)) list = d;
-          else if (Array.isArray(d.results)) list = d.results;
-        }
-        setEvents(
-          list.map((e: any) => ({
-            id: String(e.id ?? e.pk ?? Math.random()),
-            name: String(e.name || e.workshop_name || "CTF Workshop"),
-            college: String(e.college_name || e.college || "—"),
-            code: String(e.event_code || e.code || "—"),
-            participants: Number(e.enrolled_participants ?? e.participants_count ?? e.participants ?? 0),
-            status: normalizeStatus(e.status),
-            date: String(e.event_date || e.date || "—"),
-            description: String(e.description || ""),
-          }))
-        );
-        setError(null);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError("Failed to load events.");
-        setLoading(false);
-        console.error("[Events] fetch error:", err);
+      .then((data) => processResponseData(data))
+      .catch(() => {
+        fetch("/api/v1/events/")
+          .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+          .then((data) => processResponseData(data))
+          .catch((finalErr) => {
+            setError("Failed to load events.");
+            setLoading(false);
+            console.error("[Events] fetch error:", finalErr);
+          });
       });
   };
 
