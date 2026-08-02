@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Radio,
 } from "lucide-react";
+import { AdminLayout } from "../components/admin/AdminLayout";
 
 export const Route = createFileRoute("/admin/events")({
   component: AdminEvents,
@@ -278,174 +279,123 @@ function AdminEvents() {
   };
 
   return (
-    <main className="min-h-screen bg-background">
-      <header className="border-b border-border/60">
-        <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
-          <Link to="/" className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-lg border border-border bg-card">
-              <span className="text-lg font-bold text-primary">B</span>
-            </div>
-            <div className="leading-tight">
-              <div className="text-sm font-bold tracking-wide">BLUETEAMERS</div>
-              <div className="text-xs font-semibold tracking-widest text-primary">ARENA</div>
-            </div>
-          </Link>
-          <div className="flex items-center gap-6">
-            <Link to="/" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-              Back to Home
-            </Link>
-            <Link to="/admin/login" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-              Sign Out
-            </Link>
-          </div>
-        </nav>
-      </header>
-
-      <div className="mx-auto flex max-w-7xl items-start gap-6 px-6 py-10">
-        <aside className="sticky top-6 hidden w-60 shrink-0 rounded-xl border border-border bg-card p-4 lg:block">
-          <div className="mb-4 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Menu
-          </div>
-          <nav className="space-y-1">
-            {navItems.map((item) => {
-              const active = item.href === "/admin/events";
-              return (
-                <Link
-                  key={item.title}
-                  to={item.href}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                    active
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-[var(--surface)] hover:text-foreground"
-                  }`}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.title}
-                </Link>
-              );
-            })}
-          </nav>
-        </aside>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Events</h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Create, publish, and manage workshop events across colleges.
-              </p>
-            </div>
-
-            <button
-              onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-[var(--primary-hover)]"
-            >
-              <Plus className="h-4 w-4" /> Create Event
-            </button>
-          </div>
-
-          <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search events, colleges, codes…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="w-full rounded-lg border border-border bg-card py-2 pl-9 pr-4 text-sm outline-none placeholder:text-muted-foreground focus:border-primary"
-              />
-            </div>
-
-            <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
-              {STATUS_FILTERS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                    statusFilter === s
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card">
-            {loading ? (
-              <div className="px-4 py-10 text-center text-sm text-muted-foreground">Loading events…</div>
-            ) : error ? (
-              <div className="px-4 py-10 text-center text-sm text-red-400">{error}</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="border-b border-border bg-[var(--surface)] text-xs uppercase text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-medium">Event Name</th>
-                      <th className="px-4 py-3 text-left font-medium">College</th>
-                      <th className="px-4 py-3 text-left font-medium">Event Code</th>
-                      <th className="px-4 py-3 text-right font-medium">Participants</th>
-                      <th className="px-4 py-3 text-left font-medium">Status</th>
-                      <th className="px-4 py-3 text-right font-medium">Date</th>
-                      <th className="px-4 py-3 text-right font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((row) => (
-                      <tr key={row.id} className="border-b border-border/50 last:border-0">
-                        <td className="px-4 py-3 font-medium">{row.name}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{row.college}</td>
-                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{row.code}</td>
-                        <td className="px-4 py-3 text-right">{row.participants}</td>
-                        <td className="px-4 py-3">
-                          <StatusBadge status={row.status} />
-                        </td>
-                        <td className="px-4 py-3 text-right text-muted-foreground">{row.date}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1">
-                            <IconBtn label="View" onClick={() => setViewingEvent(row)}>
-                              <Eye className="h-4 w-4" />
-                            </IconBtn>
-                            <IconBtn label="Edit" onClick={() => setEditingEvent(row)}>
-                              <Pencil className="h-4 w-4" />
-                            </IconBtn>
-                            <IconBtn label="Toggle Status" onClick={() => handleToggleStatus(row)}>
-                              <Radio className="h-4 w-4" />
-                            </IconBtn>
-                            <IconBtn label="Duplicate" onClick={() => handleDuplicate(row.id)}>
-                              <Copy className="h-4 w-4" />
-                            </IconBtn>
-                            <IconBtn label="Delete" danger onClick={() => handleDelete(row.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </IconBtn>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {filtered.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                          No events found. Create your first event using the button above.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          <div className="mt-8">
-            <Link
-              to="/admin/dashboard"
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" /> Back to Dashboard
-            </Link>
-          </div>
+    <AdminLayout activeId="events">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Events</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Create, publish, and manage workshop events across colleges.
+          </p>
         </div>
+
+        <button
+          onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-[var(--primary-hover)] cursor-pointer"
+        >
+          <Plus className="h-4 w-4" /> Create Event
+        </button>
+      </div>
+
+      <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search events, colleges, codes…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full rounded-lg border border-border bg-card py-2 pl-9 pr-4 text-sm outline-none placeholder:text-muted-foreground focus:border-primary"
+          />
+        </div>
+
+        <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
+          {STATUS_FILTERS.map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                statusFilter === s
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card">
+        {loading ? (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">Loading events…</div>
+        ) : error ? (
+          <div className="px-4 py-10 text-center text-sm text-red-400">{error}</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-border bg-[var(--surface)] text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium">Event Name</th>
+                  <th className="px-4 py-3 text-left font-medium">College</th>
+                  <th className="px-4 py-3 text-left font-medium">Event Code</th>
+                  <th className="px-4 py-3 text-right font-medium">Participants</th>
+                  <th className="px-4 py-3 text-left font-medium">Status</th>
+                  <th className="px-4 py-3 text-right font-medium">Date</th>
+                  <th className="px-4 py-3 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((row) => (
+                  <tr key={row.id} className="border-b border-border/50 last:border-0">
+                    <td className="px-4 py-3 font-medium">{row.name}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{row.college}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{row.code}</td>
+                    <td className="px-4 py-3 text-right">{row.participants}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={row.status} />
+                    </td>
+                    <td className="px-4 py-3 text-right text-muted-foreground">{row.date}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <IconBtn label="View" onClick={() => setViewingEvent(row)}>
+                          <Eye className="h-4 w-4" />
+                        </IconBtn>
+                        <IconBtn label="Edit" onClick={() => setEditingEvent(row)}>
+                          <Pencil className="h-4 w-4" />
+                        </IconBtn>
+                        <IconBtn label="Toggle Status" onClick={() => handleToggleStatus(row)}>
+                          <Radio className="h-4 w-4" />
+                        </IconBtn>
+                        <IconBtn label="Duplicate" onClick={() => handleDuplicate(row.id)}>
+                          <Copy className="h-4 w-4" />
+                        </IconBtn>
+                        <IconBtn label="Delete" danger onClick={() => handleDelete(row.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </IconBtn>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      No events found. Create your first event using the button above.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8">
+        <Link
+          to="/admin/dashboard"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+        </Link>
       </div>
 
       {showCreate && (
@@ -469,7 +419,7 @@ function AdminEvents() {
           onUpdate={handleUpdate}
         />
       )}
-    </main>
+    </AdminLayout>
   );
 }
 
@@ -519,36 +469,47 @@ function generateCode(college: string) {
 
 function ViewEventModal({ event, onClose }: { event: EventRow; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl space-y-4"
+        className="relative w-full max-w-md overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl space-y-6 p-6 sm:p-7 backdrop-blur-xl animate-in zoom-in-95 duration-200"
       >
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-lg font-bold">{event.name}</h2>
-            <p className="text-xs text-muted-foreground">{event.college}</p>
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/80 via-primary to-primary/40" />
+
+        <div className="flex items-start justify-between gap-4 pt-1">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 border border-primary/20 text-primary shadow-xs">
+              <Eye className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-extrabold tracking-tight text-foreground">{event.name}</h2>
+              <p className="text-xs font-medium text-muted-foreground">{event.college}</p>
+            </div>
           </div>
-          <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-[var(--surface)]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors border border-transparent hover:border-border/60 cursor-pointer"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="space-y-2 border-t border-b border-border/60 py-4 text-sm">
-          <div className="flex justify-between"><span className="text-muted-foreground">Event Code:</span><span className="font-mono">{event.code}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Status:</span><StatusBadge status={event.status} /></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Event Date:</span><span>{event.date}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Enrolled Participants:</span><span>{event.participants}</span></div>
+        <div className="space-y-3 rounded-xl border border-border/60 bg-background/60 p-4 text-sm">
+          <div className="flex justify-between items-center"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Event Code:</span><span className="font-mono text-xs font-bold text-primary">{event.code}</span></div>
+          <div className="flex justify-between items-center"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status:</span><StatusBadge status={event.status} /></div>
+          <div className="flex justify-between items-center"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Event Date:</span><span className="font-medium text-foreground">{event.date}</span></div>
+          <div className="flex justify-between items-center"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Enrolled Participants:</span><span className="font-medium text-foreground">{event.participants}</span></div>
           {event.description && (
-            <div className="pt-2 text-xs text-muted-foreground">
-              <span className="font-semibold block text-foreground mb-1">Description:</span>
+            <div className="pt-2 border-t border-border/40 text-xs text-muted-foreground">
+              <span className="font-semibold block text-foreground mb-1 uppercase tracking-wider">Description:</span>
               {event.description}
             </div>
           )}
         </div>
 
-        <div className="flex justify-end">
-          <button onClick={onClose} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+        <div className="flex justify-end pt-2">
+          <button onClick={onClose} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all cursor-pointer">
             Close
           </button>
         </div>
@@ -587,18 +548,29 @@ function EditEventModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
       <form
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl space-y-4"
+        className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl space-y-6 p-6 sm:p-7 backdrop-blur-xl animate-in zoom-in-95 duration-200"
       >
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-lg font-bold">Edit Event</h2>
-            <p className="mt-1 text-xs text-muted-foreground">Update event details in PostgreSQL.</p>
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/80 via-primary to-primary/40" />
+
+        <div className="flex items-start justify-between gap-4 pt-1">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 border border-primary/20 text-primary shadow-xs">
+              <Pencil className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-extrabold tracking-tight text-foreground">Edit Event</h2>
+              <p className="mt-0.5 text-xs font-medium text-muted-foreground">Update event details in PostgreSQL.</p>
+            </div>
           </div>
-          <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-[var(--surface)]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors border border-transparent hover:border-border/60 cursor-pointer"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -642,11 +614,18 @@ function EditEventModal({
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground">
+        <div className="pt-3 border-t border-border/60 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-border/80 px-5 py-2.5 text-sm font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-all cursor-pointer"
+          >
             Cancel
           </button>
-          <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+          <button
+            type="submit"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all cursor-pointer"
+          >
             Save Changes
           </button>
         </div>
@@ -699,18 +678,29 @@ function CreateEventModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
       <form
         onSubmit={publish}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl space-y-4"
+        className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl space-y-6 p-6 sm:p-7 backdrop-blur-xl animate-in zoom-in-95 duration-200"
       >
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-lg font-bold">Create Event</h2>
-            <p className="mt-1 text-xs text-muted-foreground">Configure a new workshop and publish it live.</p>
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/80 via-primary to-primary/40" />
+
+        <div className="flex items-start justify-between gap-4 pt-1">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 border border-primary/20 text-primary shadow-xs">
+              <Plus className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-extrabold tracking-tight text-foreground">Create Event</h2>
+              <p className="mt-0.5 text-xs font-medium text-muted-foreground">Configure a new workshop and publish it live.</p>
+            </div>
           </div>
-          <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-[var(--surface)] hover:text-foreground">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors border border-transparent hover:border-border/60 cursor-pointer"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -748,7 +738,7 @@ function CreateEventModal({
             </Field>
           </div>
           <div className="sm:col-span-2">
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Event Code</label>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground/90">Event Code</label>
             <div className="flex gap-2">
               <input
                 value={code}
@@ -759,7 +749,7 @@ function CreateEventModal({
               <button
                 type="button"
                 onClick={() => setCode(generateCode(college))}
-                className="inline-flex items-center gap-2 rounded-lg border border-border bg-[var(--surface)] px-3 text-xs font-medium text-foreground hover:border-primary"
+                className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-border bg-accent/60 px-4 text-xs font-semibold text-foreground hover:bg-accent hover:border-primary/40 transition-all cursor-pointer"
               >
                 <RefreshCw className="h-3.5 w-3.5" /> Generate
               </button>
@@ -778,17 +768,17 @@ function CreateEventModal({
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-end gap-2">
+        <div className="pt-3 border-t border-border/60 flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+            className="rounded-xl border border-border/80 px-5 py-2.5 text-sm font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-all cursor-pointer"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-[var(--primary-hover)]"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all cursor-pointer"
           >
             Publish Event
           </button>
@@ -799,12 +789,12 @@ function CreateEventModal({
 }
 
 const inputCls =
-  "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary";
+  "w-full rounded-xl border border-border/80 bg-background/80 px-3.5 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 shadow-xs hover:border-border/100";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{label}</label>
+      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground/90">{label}</label>
       {children}
     </div>
   );
