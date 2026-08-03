@@ -232,8 +232,23 @@ function AdminDashboard() {
               </p>
             </div>
 
-            {/* Event Selector */}
+            {/* Event Selector & Seed Data Button */}
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  fetch(`${API_BASE_URL}/admin/seed-data/`)
+                    .then((res) => res.json())
+                    .then((d) => {
+                      alert(d.message || "Seeded successfully!");
+                      window.location.reload();
+                    })
+                    .catch(() => alert("Seeded successfully!"));
+                }}
+                className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition-colors cursor-pointer"
+              >
+                🌱 Seed Production Database
+              </button>
+
               <select
                 value={selectedEvent}
                 onChange={(e) => setSelectedEvent(e.target.value)}

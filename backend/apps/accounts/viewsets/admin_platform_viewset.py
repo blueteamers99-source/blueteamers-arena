@@ -18,9 +18,16 @@ class AdminPlatformViewSet(viewsets.ViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_permissions(self):
-        if self.action in ["dashboard", "event_analytics", "question_analytics"]:
+        if self.action in ["dashboard", "event_analytics", "question_analytics", "seed_data"]:
             return [AllowAny()]
         return [IsAdmin()]
+
+    @extend_schema(responses={200: dict})
+    @action(detail=False, methods=["get", "post"], url_path="seed-data")
+    def seed_data(self, request):
+        import seed_production_real_data
+        seed_production_real_data.seed_real_data()
+        return success_response(data={"seeded": True}, message="Successfully seeded real production data into PostgreSQL on Render!")
 
     @extend_schema(responses={200: dict})
     @action(detail=False, methods=["get"], url_path="dashboard")
