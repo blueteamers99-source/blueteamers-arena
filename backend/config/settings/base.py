@@ -185,7 +185,7 @@ SPECTACULAR_SETTINGS = {
 }
 
 # CORS Settings
-CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:5173", "http://localhost:3000"])
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
 # Logging Configuration

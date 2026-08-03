@@ -1,4 +1,5 @@
 from rest_framework import viewsets, status
+from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from drf_spectacular.utils import extend_schema
@@ -45,18 +46,44 @@ class ParticipantViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="register-student", permission_classes=[AllowAny])
     def register_student(self, request):
         serializer = RegisterStudentSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        event = EventSelector.get_by_id(serializer.validated_data["event_id"])
-        if not event:
-            return success_response(message="Event not found", status_code=status.HTTP_404_NOT_FOUND)
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "message": "Invalid registration data."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        participant = ParticipantService.register_participant(
-            event=event,
-            name=serializer.validated_data["name"],
-            email=serializer.validated_data["email"],
-        )
-        return success_response(
-            data=ParticipantSerializer(participant).data,
-            message="Student registered successfully.",
-            status_code=status.HTTP_201_CREATED,
-        )
+        from apps.events.models.event import Event
+        event_code = serializer.validated_data.get("event_code") or serializer.validated_data.get("event_id")
+        event = Event.objects.filter(event_code__iexact=str(event_code)).first() or EventSelector.get_by_id(event_code)
+        if not event:
+            return Response({"success": False, "message": "Event not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            participant = ParticipantService.register_participant(
+                event=event,
+                name=serializer.validated_data["name"],
+                email=serializer.validated_data["email"],
+            )
+            tokens = ParticipantService.generate_tokens_for_participant(participant)
+            return Response(
+                {
+                    "success": True,
+                    "tokens": tokens,
+                    "access": tokens["access"],
+                    "refresh": tokens["refresh"],
+                    "data": ParticipantSerializer(participant).data,
+                    "participant": ParticipantSerializer(participant).data,
+                    "message": "Student registered successfully.",
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        except Exception as e:
+            msg = getattr(e, "detail", str(e))
+            if isinstance(msg, dict):
+                msg = msg.get("message") or msg.get("detail") or str(msg)
+            elif isinstance(msg, list) and msg:
+                msg = str(msg[0])
+            return Response(
+                {"success": False, "message": str(msg)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )

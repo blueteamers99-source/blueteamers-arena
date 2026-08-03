@@ -3,6 +3,7 @@ export type ChallengeStatus = "not_started" | "in_progress" | "completed";
 
 export type Challenge = {
   id: string;
+  slug?: string;
   number: number;
   name: string;
   description: string;

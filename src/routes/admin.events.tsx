@@ -479,11 +479,99 @@ function generateCode(college: string) {
 }
 
 function ViewEventModal({ event, onClose }: { event: EventRow; onClose: () => void }) {
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const [approvedStudents, setApprovedStudents] = useState<any[]>([]);
+  const [studentSearch, setStudentSearch] = useState("");
+  const [stats, setStats] = useState({ csv_uploaded: 0, arena_joined: 0, pending: 0 });
+  const [loadingStudents, setLoadingStudents] = useState(false);
+
+  const loadApprovedStudents = () => {
+    setLoadingStudents(true);
+    fetch(`${API_BASE_URL}/events/${event.id}/approved-students/?search=${encodeURIComponent(studentSearch)}`)
+      .then((res) => res.json())
+      .then((resData) => {
+        if (resData && resData.success) {
+          const list = resData.results || resData.data || [];
+          setApprovedStudents(list);
+          setStats({
+            csv_uploaded: resData.csv_uploaded_count || list.length,
+            arena_joined: resData.arena_joined_count || list.filter((s: any) => s.has_joined).length,
+            pending: resData.pending_count || list.filter((s: any) => !s.has_joined).length,
+          });
+        }
+      })
+      .catch((err) => console.error("Error fetching approved students:", err))
+      .finally(() => setLoadingStudents(false));
+  };
+
+  useEffect(() => {
+    loadApprovedStudents();
+  }, [studentSearch]);
+
+  const handleUploadCsv = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!csvFile) return;
+
+    setUploading(true);
+    setUploadMsg(null);
+
+    const formData = new FormData();
+    formData.append("file", csvFile);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/events/${event.id}/upload-students/`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUploadMsg({ type: "success", text: data.message || `Imported ${data.imported_count} students!` });
+        setCsvFile(null);
+        loadApprovedStudents();
+      } else {
+        setUploadMsg({ type: "error", text: data.message || "CSV Upload failed." });
+      }
+    } catch (err: any) {
+      setUploadMsg({ type: "error", text: `Upload failed: ${err.message || err}` });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteStudent = async (studentId: string) => {
+    if (!confirm("Are you sure you want to remove this approved student?")) return;
+    try {
+      await fetch(`${API_BASE_URL}/events/${event.id}/approved-students/?student_id=${studentId}`, {
+        method: "DELETE",
+      });
+      loadApprovedStudents();
+    } catch (err) {
+      console.error("Error deleting student:", err);
+    }
+  };
+
+  const handleExportCsv = () => {
+    if (!approvedStudents.length) return;
+    const csvContent =
+      "Registered Name,Registered Email,Status\n" +
+      approvedStudents.map((s) => `"${s.registered_name}","${s.registered_email}","${s.status}"`).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `approved_students_${event.code}.csv`;
+    link.click();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-md overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl space-y-6 p-6 sm:p-7 backdrop-blur-xl animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border/80 bg-card shadow-2xl space-y-6 p-6 sm:p-7 backdrop-blur-xl animate-in zoom-in-95 duration-200"
       >
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/80 via-primary to-primary/40" />
 
@@ -494,7 +582,7 @@ function ViewEventModal({ event, onClose }: { event: EventRow; onClose: () => vo
             </div>
             <div>
               <h2 className="text-xl font-extrabold tracking-tight text-foreground">{event.name}</h2>
-              <p className="text-xs font-medium text-muted-foreground">{event.college}</p>
+              <p className="text-xs font-medium text-muted-foreground">{event.college} • Code: <span className="font-mono text-primary font-bold">{event.code}</span></p>
             </div>
           </div>
           <button
@@ -506,17 +594,116 @@ function ViewEventModal({ event, onClose }: { event: EventRow; onClose: () => vo
           </button>
         </div>
 
-        <div className="space-y-3 rounded-xl border border-border/60 bg-background/60 p-4 text-sm">
-          <div className="flex justify-between items-center"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Event Code:</span><span className="font-mono text-xs font-bold text-primary">{event.code}</span></div>
-          <div className="flex justify-between items-center"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status:</span><StatusBadge status={event.status} /></div>
-          <div className="flex justify-between items-center"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Event Date:</span><span className="font-medium text-foreground">{event.date}</span></div>
-          <div className="flex justify-between items-center"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Enrolled Participants:</span><span className="font-medium text-foreground">{event.participants}</span></div>
-          {event.description && (
-            <div className="pt-2 border-t border-border/40 text-xs text-muted-foreground">
-              <span className="font-semibold block text-foreground mb-1 uppercase tracking-wider">Description:</span>
-              {event.description}
+        {/* Real-Time Live Registration Status Cards */}
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="rounded-xl border border-border/60 bg-[var(--surface)] p-3.5 shadow-inner">
+            <div className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">CSV Uploaded</div>
+            <div className="mt-1 text-xl font-black text-foreground">{stats.csv_uploaded}</div>
+            <div className="text-[10px] text-muted-foreground">Approved Students</div>
+          </div>
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 shadow-inner">
+            <div className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400">Arena Joined</div>
+            <div className="mt-1 text-xl font-black text-emerald-400">{stats.arena_joined}</div>
+            <div className="text-[10px] text-emerald-400/80">Active Participants</div>
+          </div>
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 shadow-inner">
+            <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-400">Pending</div>
+            <div className="mt-1 text-xl font-black text-amber-400">{stats.pending}</div>
+            <div className="text-[10px] text-amber-400/80">Not Yet Joined</div>
+          </div>
+        </div>
+
+        {/* CSV Upload Box */}
+        <div className="rounded-xl border border-border/80 bg-background/60 p-4 space-y-3">
+          <div className="text-xs font-bold uppercase tracking-wider text-foreground">Upload Registered Student CSV</div>
+          <p className="text-xs text-muted-foreground">
+            Columns required: <strong className="text-foreground">Registered Name,Registered Email</strong>
+          </p>
+          <form onSubmit={handleUploadCsv} className="flex flex-col sm:flex-row items-center gap-3">
+            <input
+              type="file"
+              accept=".csv"
+              onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
+              className="flex-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-primary/20 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/30"
+            />
+            <button
+              type="submit"
+              disabled={uploading || !csvFile}
+              className="w-full sm:w-auto rounded-xl bg-primary px-5 py-2 text-xs font-bold text-primary-foreground shadow-md hover:bg-primary/90 disabled:opacity-50 transition-all cursor-pointer shrink-0"
+            >
+              {uploading ? "Importing..." : "Import Students"}
+            </button>
+          </form>
+
+          {uploadMsg && (
+            <div className={`p-2.5 rounded-lg text-xs font-semibold ${uploadMsg.type === "success" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" : "bg-destructive/10 text-destructive border border-destructive/30"}`}>
+              {uploadMsg.text}
             </div>
           )}
+        </div>
+
+        {/* Approved Students List Table */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Approved Students ({approvedStudents.length})</h3>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={studentSearch}
+                onChange={(e) => setStudentSearch(e.target.value)}
+                placeholder="Search student..."
+                className="rounded-lg border border-border bg-background px-3 py-1 text-xs text-foreground outline-none focus:border-primary"
+              />
+              <button
+                onClick={handleExportCsv}
+                disabled={!approvedStudents.length}
+                className="rounded-lg border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              >
+                Export CSV
+              </button>
+            </div>
+          </div>
+
+          <div className="max-h-60 overflow-y-auto rounded-xl border border-border/80 bg-background/80">
+            {loadingStudents ? (
+              <div className="p-4 text-center text-xs text-muted-foreground">Loading students...</div>
+            ) : approvedStudents.length === 0 ? (
+              <div className="p-6 text-center text-xs text-muted-foreground">No approved students imported yet. Upload a CSV to authorize students.</div>
+            ) : (
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-border/60 bg-[var(--surface)] font-bold text-muted-foreground">
+                  <tr>
+                    <th className="p-2.5">Registered Name</th>
+                    <th className="p-2.5">Registered Email</th>
+                    <th className="p-2.5">Arena Status</th>
+                    <th className="p-2.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40 font-medium">
+                  {approvedStudents.map((s) => (
+                    <tr key={s.id} className="hover:bg-accent/40 transition-colors">
+                      <td className="p-2.5 text-foreground">{s.registered_name}</td>
+                      <td className="p-2.5 font-mono text-muted-foreground">{s.registered_email}</td>
+                      <td className="p-2.5">
+                        <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ${s.has_joined ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" : "bg-amber-500/10 text-amber-400 border border-amber-500/30"}`}>
+                          {s.status}
+                        </span>
+                      </td>
+                      <td className="p-2.5 text-right">
+                        <button
+                          onClick={() => handleDeleteStudent(s.id)}
+                          className="rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          title="Remove Student"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-end pt-2">
