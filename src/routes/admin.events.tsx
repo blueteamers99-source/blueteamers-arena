@@ -44,6 +44,9 @@ type EventRow = {
   description?: string;
   learningOutcomes?: string;
   prerequisites?: string;
+  totalScore?: number;
+  passingScore?: number;
+  certificateAvailable?: boolean;
 };
 
 const navItems = [
@@ -112,6 +115,9 @@ function AdminEvents() {
           description: String(e.description || ""),
           learningOutcomes: String(e.learning_outcomes || e.learningOutcomes || ""),
           prerequisites: String(e.prerequisites || ""),
+          totalScore: Number(e.total_score || e.totalScore || 500),
+          passingScore: Number(e.passing_score || e.passingScore || 350),
+          certificateAvailable: e.certificate_available ?? e.certificateAvailable ?? true,
         }))
       );
       setError(null);
@@ -226,7 +232,9 @@ function AdminEvents() {
     status?: EventStatus;
     description?: string;
     duration?: number;
+    totalScore?: number;
     passingScore?: number;
+    certificateAvailable?: boolean;
     challenges?: number;
     learningOutcomes?: string;
     prerequisites?: string;
@@ -241,7 +249,9 @@ function AdminEvents() {
       event_code: formData.code || `EVENT-${Date.now()}`,
       event_date: formData.date || new Date().toISOString().split("T")[0],
       duration_minutes: formData.duration || 60,
-      passing_score: formData.passingScore || 600,
+      total_score: formData.totalScore || 500,
+      passing_score: formData.passingScore || 350,
+      certificate_available: formData.certificateAvailable ?? true,
       total_challenges: formData.challenges || 5,
       status: formData.status || "Upcoming",
       description: formData.description || "",
@@ -286,6 +296,9 @@ function AdminEvents() {
       event_date: updated.date,
       status: updated.status,
       description: updated.description || "",
+      total_score: updated.totalScore || 500,
+      passing_score: updated.passingScore || 350,
+      certificate_available: updated.certificateAvailable ?? true,
       learning_outcomes: updated.learningOutcomes || "",
       prerequisites: updated.prerequisites || "",
     };
@@ -745,6 +758,9 @@ function EditEventModal({
   const [description, setDescription] = useState(event.description || "");
   const [learningOutcomes, setLearningOutcomes] = useState(event.learningOutcomes || "");
   const [prerequisites, setPrerequisites] = useState(event.prerequisites || "");
+  const [totalScore, setTotalScore] = useState(String(event.totalScore || 500));
+  const [passingScore, setPassingScore] = useState(String(event.passingScore || 350));
+  const [certificateAvailable, setCertificateAvailable] = useState<boolean>(event.certificateAvailable ?? true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -758,6 +774,9 @@ function EditEventModal({
       description,
       learningOutcomes,
       prerequisites,
+      totalScore: Number(totalScore) || 500,
+      passingScore: Number(passingScore) || 350,
+      certificateAvailable,
     });
   };
 
@@ -810,6 +829,24 @@ function EditEventModal({
               <option value="Completed">Completed</option>
             </select>
           </Field>
+          <Field label="Total Test Score">
+            <input required type="number" min={0} value={totalScore} onChange={(e) => setTotalScore(e.target.value)} className={inputCls} />
+          </Field>
+          <Field label="Passing Score">
+            <input required type="number" min={0} value={passingScore} onChange={(e) => setPassingScore(e.target.value)} className={inputCls} />
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="Certificate Available">
+              <select
+                value={certificateAvailable ? "true" : "false"}
+                onChange={(e) => setCertificateAvailable(e.target.value === "true")}
+                className={inputCls}
+              >
+                <option value="true">Available (Yes)</option>
+                <option value="false">Not Available (No)</option>
+              </select>
+            </Field>
+          </div>
           <div className="sm:col-span-2">
             <Field label="Event Code">
               <input required value={code} onChange={(e) => setCode(e.target.value)} className={`${inputCls} font-mono`} />
@@ -883,7 +920,9 @@ function CreateEventModal({
     status?: EventStatus;
     description?: string;
     duration?: number;
+    totalScore?: number;
     passingScore?: number;
+    certificateAvailable?: boolean;
     challenges?: number;
     learningOutcomes?: string;
     prerequisites?: string;
@@ -895,7 +934,9 @@ function CreateEventModal({
   const [status, setStatus] = useState<EventStatus>("Upcoming");
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState("60");
-  const [passingScore, setPassingScore] = useState("600");
+  const [totalScore, setTotalScore] = useState("500");
+  const [passingScore, setPassingScore] = useState("350");
+  const [certificateAvailable, setCertificateAvailable] = useState<boolean>(true);
   const [challenges, setChallenges] = useState("5");
   const [code, setCode] = useState("");
   const [learningOutcomes, setLearningOutcomes] = useState("");
@@ -912,7 +953,9 @@ function CreateEventModal({
       status,
       description,
       duration: Number(duration) || 60,
-      passingScore: Number(passingScore) || 600,
+      totalScore: Number(totalScore) || 500,
+      passingScore: Number(passingScore) || 350,
+      certificateAvailable,
       challenges: Number(challenges) || 5,
       learningOutcomes,
       prerequisites,
@@ -971,8 +1014,21 @@ function CreateEventModal({
           <Field label="Duration (mins)">
             <input required type="number" min={10} value={duration} onChange={(e) => setDuration(e.target.value)} className={inputCls} />
           </Field>
+          <Field label="Total Test Score">
+            <input required type="number" min={0} value={totalScore} onChange={(e) => setTotalScore(e.target.value)} className={inputCls} placeholder="e.g. 500" />
+          </Field>
           <Field label="Passing Score">
-            <input required type="number" min={0} value={passingScore} onChange={(e) => setPassingScore(e.target.value)} className={inputCls} />
+            <input required type="number" min={0} value={passingScore} onChange={(e) => setPassingScore(e.target.value)} className={inputCls} placeholder="e.g. 350" />
+          </Field>
+          <Field label="Certificate Available">
+            <select
+              value={certificateAvailable ? "true" : "false"}
+              onChange={(e) => setCertificateAvailable(e.target.value === "true")}
+              className={inputCls}
+            >
+              <option value="true">Available (Yes)</option>
+              <option value="false">Not Available (No)</option>
+            </select>
           </Field>
           <div className="sm:col-span-2">
             <Field label="Number of Challenges">
