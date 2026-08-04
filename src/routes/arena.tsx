@@ -60,7 +60,7 @@ function Arena() {
     const res = await validateCode(code);
     if (res.success) {
       setTimeout(() => {
-        navigate({ to: "/student" });
+        navigate({ to: "/event" });
       }, 500);
     }
   };
