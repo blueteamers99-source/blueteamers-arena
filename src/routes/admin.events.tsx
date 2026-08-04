@@ -42,6 +42,8 @@ type EventRow = {
   status: EventStatus;
   date: string;
   description?: string;
+  learningOutcomes?: string;
+  prerequisites?: string;
 };
 
 const navItems = [
@@ -108,6 +110,8 @@ function AdminEvents() {
           status: normalizeStatus(e.status),
           date: String(e.event_date || e.date || "—"),
           description: String(e.description || ""),
+          learningOutcomes: String(e.learning_outcomes || e.learningOutcomes || ""),
+          prerequisites: String(e.prerequisites || ""),
         }))
       );
       setError(null);
@@ -191,6 +195,8 @@ function AdminEvents() {
         event_date: "2026-08-01",
         status: "Upcoming",
         description: src.description || "",
+        learning_outcomes: src.learningOutcomes || "",
+        prerequisites: src.prerequisites || "",
       }),
     })
       .then(() => fetchEvents())
@@ -222,6 +228,8 @@ function AdminEvents() {
     duration?: number;
     passingScore?: number;
     challenges?: number;
+    learningOutcomes?: string;
+    prerequisites?: string;
   }) => {
     const token = getAdminToken();
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -237,6 +245,8 @@ function AdminEvents() {
       total_challenges: formData.challenges || 5,
       status: formData.status || "Upcoming",
       description: formData.description || "",
+      learning_outcomes: formData.learningOutcomes || "",
+      prerequisites: formData.prerequisites || "",
     };
 
     fetch(`${API_BASE_URL}/events/`, {
@@ -276,6 +286,8 @@ function AdminEvents() {
       event_date: updated.date,
       status: updated.status,
       description: updated.description || "",
+      learning_outcomes: updated.learningOutcomes || "",
+      prerequisites: updated.prerequisites || "",
     };
 
     fetch(`${API_BASE_URL}/events/${updated.id}/`, {
@@ -731,6 +743,8 @@ function EditEventModal({
   const [code, setCode] = useState(event.code);
   const [status, setStatus] = useState<EventStatus>(event.status);
   const [description, setDescription] = useState(event.description || "");
+  const [learningOutcomes, setLearningOutcomes] = useState(event.learningOutcomes || "");
+  const [prerequisites, setPrerequisites] = useState(event.prerequisites || "");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -742,6 +756,8 @@ function EditEventModal({
       code,
       status,
       description,
+      learningOutcomes,
+      prerequisites,
     });
   };
 
@@ -810,6 +826,28 @@ function EditEventModal({
               />
             </Field>
           </div>
+          <div className="sm:col-span-2">
+            <Field label="What Students Will Learn">
+              <textarea
+                value={learningOutcomes}
+                onChange={(e) => setLearningOutcomes(e.target.value)}
+                rows={2}
+                className={inputCls}
+                placeholder="What students will learn (e.g. Email Security, SIEM Log Analysis)..."
+              />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Prerequisites">
+              <textarea
+                value={prerequisites}
+                onChange={(e) => setPrerequisites(e.target.value)}
+                rows={2}
+                className={inputCls}
+                placeholder="Prerequisites (e.g. Basic Computer Knowledge, Laptop with Chrome)..."
+              />
+            </Field>
+          </div>
         </div>
 
         <div className="pt-2 border-t border-border/60 flex items-center justify-end gap-2.5">
@@ -847,6 +885,8 @@ function CreateEventModal({
     duration?: number;
     passingScore?: number;
     challenges?: number;
+    learningOutcomes?: string;
+    prerequisites?: string;
   }) => void;
 }) {
   const [college, setCollege] = useState("");
@@ -858,6 +898,8 @@ function CreateEventModal({
   const [passingScore, setPassingScore] = useState("600");
   const [challenges, setChallenges] = useState("5");
   const [code, setCode] = useState("");
+  const [learningOutcomes, setLearningOutcomes] = useState("");
+  const [prerequisites, setPrerequisites] = useState("");
 
   const publish = (e: React.FormEvent) => {
     e.preventDefault();
@@ -872,6 +914,8 @@ function CreateEventModal({
       duration: Number(duration) || 60,
       passingScore: Number(passingScore) || 600,
       challenges: Number(challenges) || 5,
+      learningOutcomes,
+      prerequisites,
     });
   };
 
@@ -960,7 +1004,29 @@ function CreateEventModal({
                 onChange={(e) => setDescription(e.target.value)}
                 rows={2}
                 className={inputCls}
-                placeholder="Provide event details, prerequisites, and scope..."
+                placeholder="Provide event details, scope..."
+              />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="What Students Will Learn">
+              <textarea
+                value={learningOutcomes}
+                onChange={(e) => setLearningOutcomes(e.target.value)}
+                rows={2}
+                className={inputCls}
+                placeholder="What students will learn (e.g. Email Security, SIEM Log Analysis)..."
+              />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Prerequisites">
+              <textarea
+                value={prerequisites}
+                onChange={(e) => setPrerequisites(e.target.value)}
+                rows={2}
+                className={inputCls}
+                placeholder="Prerequisites (e.g. Basic Computer Knowledge, Laptop with Chrome)..."
               />
             </Field>
           </div>
