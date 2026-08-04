@@ -85,7 +85,7 @@ function AdminDashboard() {
     fetch(`${API_BASE_URL}/leaderboard/`)
       .then((res) => res.json())
       .then((resData) => {
-        const list = resData.data?.leaderboard || resData.leaderboard || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
+        const list = resData.data?.rankings || resData.rankings || resData.data?.leaderboard || resData.leaderboard || resData.results || (Array.isArray(resData.data) ? resData.data : Array.isArray(resData) ? resData : []);
         if (Array.isArray(list)) {
           setLeaderboardItems(list);
         }
@@ -114,13 +114,24 @@ function AdminDashboard() {
     ? dashStats.recent_activity
     : ["System initialized with PostgreSQL."];
 
-  const podium = leaderboardItems.slice(0, 3).map((p: any, idx: number) => ({
-    rank: idx + 1,
-    medal: idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉",
-    name: p.name || "Student",
-    college: p.college_name || "College",
+  const mappedLeaderboard = leaderboardItems.map((p: any, idx: number) => ({
+    rank: p.rank || idx + 1,
+    student: p.name || p.student || "Security Analyst",
+    college: p.college_name || p.college || "VRSEC",
+    challenges: `${p.completed || p.completed_challenges || 0}/5`,
+    completedCount: p.completed || p.completed_challenges || 0,
     score: p.score || 0,
     time: p.time_taken || "--:--",
+    status: (p.completed || 0) >= 5 ? "Completed" : "Running",
+  }));
+
+  const podium = mappedLeaderboard.slice(0, 3).map((p, idx) => ({
+    rank: p.rank,
+    medal: idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉",
+    name: p.student,
+    college: p.college,
+    score: p.score,
+    time: p.time,
     color: idx === 0 ? "#F59E0B" : idx === 1 ? "#9CA3AF" : "#B45309",
     border: idx === 0 ? "border-amber-500/60" : idx === 1 ? "border-slate-400/40" : "border-amber-700/40",
     bg: idx === 0 ? "from-amber-500/10 via-card to-card" : idx === 1 ? "from-slate-400/10 via-card to-card" : "from-amber-700/10 via-card to-card",
@@ -128,12 +139,12 @@ function AdminDashboard() {
 
   const sortedPodium = podium.length >= 3 ? [podium[1], podium[0], podium[2]] : podium;
 
-  const filteredLeaderboard = leaderboardItems.filter((row) => {
-    const name = String(row.name || "").toLowerCase();
-    const college = String(row.college_name || "").toLowerCase();
+  const filteredLeaderboard = mappedLeaderboard.filter((row) => {
+    const name = String(row.student).toLowerCase();
+    const college = String(row.college).toLowerCase();
     const q = lbSearch.toLowerCase();
     const matchesSearch = !q || name.includes(q) || college.includes(q);
-    const matchesFilter = lbFilter === "All" || (lbFilter === "Completed" ? row.completed > 0 : row.completed === 0);
+    const matchesFilter = lbFilter === "All" || (lbFilter === "Completed" ? row.completedCount >= 5 : row.completedCount < 5);
     return matchesSearch && matchesFilter;
   });
 
@@ -221,8 +232,23 @@ function AdminDashboard() {
               </p>
             </div>
 
-            {/* Event Selector */}
+            {/* Event Selector & Seed Data Button */}
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  fetch(`${API_BASE_URL}/admin/seed-data/`)
+                    .then((res) => res.json())
+                    .then((d) => {
+                      alert(d.message || "Seeded successfully!");
+                      window.location.reload();
+                    })
+                    .catch(() => alert("Seeded successfully!"));
+                }}
+                className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition-colors cursor-pointer"
+              >
+                🌱 Seed Production Database
+              </button>
+
               <select
                 value={selectedEvent}
                 onChange={(e) => setSelectedEvent(e.target.value)}

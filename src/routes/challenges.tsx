@@ -60,11 +60,31 @@ function ChallengesPage() {
       .then((res) => res.json())
       .then((resData) => {
         const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
-        if (Array.isArray(list)) {
-          setChallengeList(list);
+        if (Array.isArray(list) && list.length > 0) {
+          const normalized = list.map((c: any, idx: number) => ({
+            id: c.slug || c.id || `challenge-${idx + 1}`,
+            slug: c.slug || c.id,
+            number: c.challenge_number || c.number || idx + 1,
+            name: c.name || c.title || `Challenge ${idx + 1}`,
+            description: c.description || "",
+            difficulty: c.difficulty || "Easy",
+            duration: c.duration_minutes || c.duration || 20,
+            points: c.points || 100,
+            skills: Array.isArray(c.skills) && c.skills.length ? c.skills : ["SOC Analysis"],
+            objectives: Array.isArray(c.objectives) && c.objectives.length ? c.objectives : ["Investigate security incident"],
+            resources: Array.isArray(c.resources) && c.resources.length ? c.resources : [{ name: "evidence-logs.txt", type: "TXT", size: "12 KB" }],
+            brief: c.brief || c.description || "",
+            completed: Boolean(c.is_completed || c.completed),
+          }));
+          setChallengeList(normalized);
+        } else {
+          setChallengeList(CHALLENGES);
         }
       })
-      .catch((err) => console.error("Error fetching challenges:", err));
+      .catch((err) => {
+        console.error("Error fetching challenges:", err);
+        setChallengeList(CHALLENGES);
+      });
   }, []);
 
   const score = useMemo(() => challengeList.reduce((acc, c) => acc + (c.points_earned || 0), 0), [challengeList]);
@@ -87,6 +107,7 @@ function ChallengesPage() {
   const progress = useMemo(() => getProgress(), []);
 
   const startChallenge = (c: any) => {
+    setActive(c.slug || c.id || "phishnet");
     navigate({ to: `/challenge/play` as any });
   };
 
@@ -335,7 +356,7 @@ function DetailsModal({
 
         <Section title="Skills Tested">
           <div className="flex flex-wrap gap-2">
-            {challenge.skills.map((s) => (
+            {(challenge.skills || ["SOC Analysis"]).map((s: string) => (
               <span
                 key={s}
                 className="rounded-lg border border-border/80 bg-[var(--surface)] px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm"
@@ -348,7 +369,7 @@ function DetailsModal({
 
         <Section title="Objectives">
           <ul className="space-y-2 text-sm font-medium">
-            {challenge.objectives.map((o) => (
+            {(challenge.objectives || ["Investigate security incident"]).map((o: string) => (
               <li key={o} className="flex items-start gap-2.5 text-muted-foreground">
                 <CheckCircle2 className={`mt-0.5 h-4 w-4 shrink-0 ${accentText}`} />
                 <span className="text-foreground">{o}</span>
@@ -359,10 +380,10 @@ function DetailsModal({
 
         <Section title="Resources Included">
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium text-muted-foreground">
-            {challenge.resources.map((r) => (
-              <li key={r.name} className="flex items-center gap-2 truncate rounded-lg border border-border/40 bg-[var(--surface)] px-3 py-2">
+            {(challenge.resources || [{ name: "evidence-logs.txt" }]).map((r: any, idx: number) => (
+              <li key={r.name || idx} className="flex items-center gap-2 truncate rounded-lg border border-border/40 bg-[var(--surface)] px-3 py-2">
                 <FileText className={`h-3.5 w-3.5 shrink-0 ${accentText}`} />
-                <span className="truncate text-foreground">{r.name}</span>
+                <span className="truncate text-foreground">{r.name || "Evidence file"}</span>
               </li>
             ))}
           </ul>

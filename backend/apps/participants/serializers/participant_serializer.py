@@ -32,6 +32,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
 
 
 class RegisterStudentSerializer(serializers.Serializer):
-    event_id = serializers.UUIDField(required=False, allow_null=True)
+    event_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    event_code = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     name = serializers.CharField(required=True, max_length=150)
     email = serializers.EmailField(required=True)

@@ -3,6 +3,9 @@ from apps.events.models.event import Event
 from apps.events.models.event_question import EventQuestion
 
 
+from apps.events.models.approved_student import ApprovedStudent
+
+
 class EventQuestionInline(admin.TabularInline):
     model = EventQuestion
     extra = 1
@@ -22,3 +25,11 @@ class EventQuestionAdmin(admin.ModelAdmin):
     list_display = ("event", "question_id", "position", "created_at")
     list_filter = ("event",)
     ordering = ("event", "position")
+
+
+@admin.register(ApprovedStudent)
+class ApprovedStudentAdmin(admin.ModelAdmin):
+    list_display = ("registered_name", "registered_email", "event", "created_at")
+    list_filter = ("event",)
+    search_fields = ("registered_name", "registered_email", "event__event_code")
+    ordering = ("registered_name",)

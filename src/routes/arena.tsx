@@ -85,8 +85,9 @@ function Arena() {
                 reset();
               }}
               onPaste={(e) => {
-                const pasted = e.clipboardData.getData("text");
-                setCode(pasted.toUpperCase().trim());
+                e.preventDefault();
+                const pasted = e.clipboardData.getData("text").trim().toUpperCase();
+                setCode(pasted);
                 reset();
               }}
               placeholder="e.g. CBIT-3154 or JNTU-6227"

@@ -68,8 +68,19 @@ function QuestionBank() {
   const [query, setQuery] = useState("");
   const [catFilter, setCatFilter] = useState<"All" | Category>("All");
   const [showAdd, setShowAdd] = useState(false);
+  const [showCreateChallenge, setShowCreateChallenge] = useState(false);
   const [viewingQuestion, setViewingQuestion] = useState<Question | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+
+  // Create Challenge form state
+  const [challengeTitle, setChallengeTitle] = useState("");
+  const [challengeCategory, setChallengeCategory] = useState<Category>("Phishing");
+  const [challengeDiff, setChallengeDiff] = useState<Difficulty>("Easy");
+  const [challengePoints, setChallengePoints] = useState(100);
+  const [challengeDuration, setChallengeDuration] = useState(30);
+  const [challengeDesc, setChallengeDesc] = useState("");
+  const [creatingChallenge, setCreatingChallenge] = useState(false);
+  const [challengeMsg, setChallengeMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -276,6 +287,63 @@ function QuestionBank() {
     }
   };
 
+  const handleCreateChallengeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!challengeTitle.trim()) return;
+
+    setCreatingChallenge(true);
+    setChallengeMsg(null);
+
+    const token = getAdminToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const slug = challengeTitle.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/challenges/`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          title: challengeTitle.trim(),
+          name: challengeTitle.trim(),
+          slug,
+          category: challengeCategory,
+          difficulty: challengeDiff,
+          points: challengePoints,
+          duration: challengeDuration,
+          description: challengeDesc.trim(),
+        }),
+      });
+
+      const contentType = res.headers.get("content-type") || "";
+      let data: any = {};
+      if (contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        console.warn("Non-JSON response received:", text);
+      }
+
+      if (res.ok || data.success || data.id) {
+        setChallengeMsg({ type: "success", text: `Challenge '${challengeTitle}' created successfully in PostgreSQL!` });
+        setTimeout(() => {
+          setShowCreateChallenge(false);
+          setChallengeTitle("");
+          setChallengeDesc("");
+          setChallengeMsg(null);
+        }, 1500);
+      } else {
+        const detailErr = data.message || (data.errors ? Object.entries(data.errors).map(([k, v]) => `${k}: ${v}`).join(", ") : "Failed to create challenge in backend.");
+        setChallengeMsg({ type: "error", text: detailErr });
+      }
+    } catch (err: any) {
+      setChallengeMsg({ type: "error", text: `Failed: ${err.message || err}` });
+    } finally {
+      setCreatingChallenge(false);
+    }
+  };
+
   return (
     <AdminLayout activeId="questions">
       <input
@@ -294,6 +362,12 @@ function QuestionBank() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowCreateChallenge(true)}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 shadow-md cursor-pointer"
+          >
+            <Plus className="h-4 w-4" /> Create Challenge
+          </button>
           <button
             onClick={handleImportClick}
             disabled={isImporting}
@@ -478,6 +552,142 @@ function QuestionBank() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Enterprise Multi-Step Challenge Authoring Wizard */}
+      {showCreateChallenge && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setShowCreateChallenge(false)}>
+          <form
+            onSubmit={handleCreateChallengeSubmit}
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border/80 bg-card p-6 shadow-2xl space-y-4 backdrop-blur-xl animate-in zoom-in-95 duration-200"
+          >
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-primary to-amber-500" />
+            <div className="flex items-center justify-between border-b border-border/60 pb-3">
+              <div>
+                <h3 className="text-lg font-extrabold tracking-tight text-foreground flex items-center gap-2">
+                  <span className="inline-block rounded-lg bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-400 font-mono uppercase">
+                    {challengeCategory} Domain
+                  </span>
+                  Enterprise Challenge Authoring Wizard
+                </h3>
+                <p className="text-xs text-muted-foreground">Category-based SOC investigation challenge stored in PostgreSQL.</p>
+              </div>
+              <button type="button" onClick={() => setShowCreateChallenge(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Challenge Name</label>
+                  <input
+                    required
+                    value={challengeTitle}
+                    onChange={(e) => setChallengeTitle(e.target.value)}
+                    placeholder="e.g. Operation PhishNet / Alert Storm / Prompt Injection Audit"
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cybersecurity Category</label>
+                  <select
+                    value={challengeCategory}
+                    onChange={(e) => setChallengeCategory(e.target.value as Category)}
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary font-bold text-emerald-400"
+                  >
+                    {CATEGORIES.filter((c) => c !== "All").map((c) => (
+                      <option key={c} value={c}>
+                        {c === "Phishing" ? "🎣 Phishing & Email Security" : c === "SIEM" ? "📊 SIEM & Log Correlation" : c === "AI" ? "🤖 AI Security & Prompt Audit" : c === "Incident Response" ? "🚨 Incident Response & Malware" : "🕵️ Digital Forensics & Artifacts"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Difficulty Level</label>
+                  <select
+                    value={challengeDiff}
+                    onChange={(e) => setChallengeDiff(e.target.value as Difficulty)}
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+                  >
+                    <option value="Easy">Easy (Entry Level SOC)</option>
+                    <option value="Medium">Medium (Mid Level SOC)</option>
+                    <option value="Hard">Hard (Senior Threat Hunter)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Points</label>
+                  <input
+                    type="number"
+                    value={challengePoints}
+                    onChange={(e) => setChallengePoints(Number(e.target.value))}
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Duration (Mins)</label>
+                  <input
+                    type="number"
+                    value={challengeDuration}
+                    onChange={(e) => setChallengeDuration(Number(e.target.value))}
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Incident Briefing & Scenario</label>
+                <textarea
+                  rows={3}
+                  value={challengeDesc}
+                  onChange={(e) => setChallengeDesc(e.target.value)}
+                  placeholder="Describe the executive incident briefing, reported symptoms, evidence hints, and containment goals..."
+                  className="mt-1 w-full rounded-xl border border-border bg-background p-3 text-sm text-foreground outline-none focus:border-primary"
+                />
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-[var(--surface)] p-3 space-y-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-primary">Supported Category Artifacts</span>
+                <p className="text-xs text-muted-foreground">
+                  {challengeCategory === "Phishing" ? "Supports .eml, .msg, headers.txt, attachment.pdf, ioc.csv" :
+                   challengeCategory === "SIEM" ? "Supports .evtx, sysmon.log, firewall.csv, splunk.json" :
+                   challengeCategory === "AI" ? "Supports prompt.txt, chat_logs.json, model_output.txt" :
+                   challengeCategory === "Incident Response" ? "Supports pcap.pcapng, memory.raw, timeline.csv" :
+                   "Supports disk.img, browser_history.db, registry.reg, volatility.txt"}
+                </p>
+              </div>
+
+              {challengeMsg && (
+                <div className={`p-2.5 rounded-lg text-xs font-semibold ${challengeMsg.type === "success" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" : "bg-destructive/10 text-destructive border border-destructive/30"}`}>
+                  {challengeMsg.text}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-border/50">
+              <button
+                type="button"
+                onClick={() => setShowCreateChallenge(false)}
+                className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={creatingChallenge}
+                className="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-bold text-white shadow-md hover:bg-emerald-700 disabled:opacity-50 transition-all cursor-pointer flex items-center gap-2"
+              >
+                {creatingChallenge ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                {creatingChallenge ? "Publishing to PostgreSQL..." : "Publish Challenge to PostgreSQL"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

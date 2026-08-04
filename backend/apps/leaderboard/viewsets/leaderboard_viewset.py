@@ -10,9 +10,37 @@ from apps.leaderboard.serializers.leaderboard_serializer import LeaderboardRespo
 
 class LeaderboardViewSet(viewsets.ViewSet):
     authentication_classes = [ParticipantTokenAuthentication]
+    permission_classes = [AllowAny]
 
-    def get_permissions(self):
-        return [AllowAny()]
+    def _resolve_participant(self, request):
+        participant = getattr(request, "participant", None)
+        if not participant and hasattr(request, "user") and request.user:
+            participant = getattr(request.user, "participant", None)
+        if participant:
+            return participant
+
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+            try:
+                import jwt
+                from django.conf import settings
+                from apps.participants.models.participant import Participant
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+                p_id = payload.get("participant_id")
+                if p_id:
+                    return Participant.objects.filter(id=p_id).first()
+            except Exception:
+                pass
+
+        from apps.participants.models.participant import Participant
+        email = request.query_params.get("email") or request.data.get("email")
+        if email:
+            p = Participant.objects.filter(email__iexact=str(email).strip().lower()).first()
+            if p:
+                return p
+
+        return None
 
     @extend_schema(responses={200: LeaderboardResponseSerializer})
     def list(self, request):
@@ -20,9 +48,9 @@ class LeaderboardViewSet(viewsets.ViewSet):
         event_code = request.query_params.get("event_code")
         search_query = request.query_params.get("search")
 
-        student_participant = getattr(request, "participant", None)
-        if not student_participant and request.user:
-            student_participant = getattr(request.user, "participant", None)
+        student_participant = self._resolve_participant(request)
+        if student_participant and not event_id and not event_code:
+            event_id = str(student_participant.event.id)
 
         data = LeaderboardService.get_event_leaderboard(
             event_id=event_id,
@@ -35,15 +63,11 @@ class LeaderboardViewSet(viewsets.ViewSet):
     @extend_schema(responses={200: LeaderboardResponseSerializer})
     @action(detail=False, methods=["get"], url_path="current")
     def current(self, request):
-        student_participant = getattr(request, "participant", None)
-        if not student_participant and request.user:
-            student_participant = getattr(request.user, "participant", None)
-
-        if not student_participant:
-            return success_response(message="Participant token required for current event leaderboard.", status_code=status.HTTP_401_UNAUTHORIZED)
-
-        data = LeaderboardService.get_event_leaderboard(
-            event=student_participant.event,
-            student_participant=student_participant,
-        )
-        return success_response(data=data, message="Current event leaderboard retrieved successfully.")
+        student_participant = self._resolve_participant(request)
+        if student_participant:
+            data = LeaderboardService.get_event_leaderboard(
+                event=student_participant.event,
+                student_participant=student_participant,
+            )
+            return success_response(data=data, message="Current event leaderboard retrieved successfully.")
+        return self.list(request)

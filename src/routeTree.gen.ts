@@ -24,6 +24,7 @@ import { Route as ReviewRouteImport } from './routes/review'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudentRouteImport } from './routes/student'
 import { Route as StueventsRouteImport } from './routes/stuevents'
+import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminEventsRouteImport } from './routes/admin.events'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
@@ -107,6 +108,11 @@ const StueventsRoute = StueventsRouteImport.update({
   path: '/stuevents',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VerifyRoute = VerifyRouteImport.update({
+  id: '/verify',
+  path: '/verify',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminDashboardRoute = AdminDashboardRouteImport.update({
   id: '/admin/dashboard',
   path: '/admin/dashboard',
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/student': typeof StudentRoute
   '/stuevents': typeof StueventsRoute
+  '/verify': typeof VerifyRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/events': typeof AdminEventsRoute
   '/admin/login': typeof AdminLoginRoute
@@ -183,6 +190,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/student': typeof StudentRoute
   '/stuevents': typeof StueventsRoute
+  '/verify': typeof VerifyRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/events': typeof AdminEventsRoute
   '/admin/login': typeof AdminLoginRoute
@@ -208,6 +216,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/student': typeof StudentRoute
   '/stuevents': typeof StueventsRoute
+  '/verify': typeof VerifyRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/events': typeof AdminEventsRoute
   '/admin/login': typeof AdminLoginRoute
@@ -234,6 +243,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/student'
     | '/stuevents'
+    | '/verify'
     | '/admin/dashboard'
     | '/admin/events'
     | '/admin/login'
@@ -258,6 +268,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/student'
     | '/stuevents'
+    | '/verify'
     | '/admin/dashboard'
     | '/admin/events'
     | '/admin/login'
@@ -282,6 +293,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/student'
     | '/stuevents'
+    | '/verify'
     | '/admin/dashboard'
     | '/admin/events'
     | '/admin/login'
@@ -307,6 +319,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   StudentRoute: typeof StudentRoute
   StueventsRoute: typeof StueventsRoute
+  VerifyRoute: typeof VerifyRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   AdminEventsRoute: typeof AdminEventsRoute
   AdminLoginRoute: typeof AdminLoginRoute
@@ -423,6 +436,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StueventsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/verify': {
+      id: '/verify'
+      path: '/verify'
+      fullPath: '/verify'
+      preLoaderRoute: typeof VerifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/dashboard': {
       id: '/admin/dashboard'
       path: '/admin/dashboard'
@@ -491,6 +511,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   StudentRoute: StudentRoute,
   StueventsRoute: StueventsRoute,
+  VerifyRoute: VerifyRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   AdminEventsRoute: AdminEventsRoute,
   AdminLoginRoute: AdminLoginRoute,

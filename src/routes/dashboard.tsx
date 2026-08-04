@@ -107,8 +107,9 @@ function Dashboard() {
     }
   }, [searchParams?.tab]);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [certificateOpen, setCertificateOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [name, setName] = useState("Student");
+  const [name, setName] = useState("Rahul");
   const [ev, setEv] = useState<MockEvent>(() => getSelectedEvent());
 
   // Live state from PostgreSQL
@@ -125,19 +126,27 @@ function Dashboard() {
 
   useEffect(() => {
     setEv(getSelectedEvent());
-    fetch(`${API_BASE_URL}/dashboard/`)
+    const token = typeof localStorage !== "undefined" ? localStorage.getItem("student_access_token") : null;
+    const userEmail = typeof localStorage !== "undefined" ? localStorage.getItem("user_email") : null;
+
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const meUrl = userEmail ? `${API_BASE_URL}/dashboard/me/?email=${encodeURIComponent(userEmail)}` : `${API_BASE_URL}/dashboard/me/`;
+
+    fetch(meUrl, { headers })
       .then((res) => res.json())
       .then((resData) => {
-        if (resData && (resData.data || resData.success)) {
+        if (resData && (resData.name || resData.data)) {
           const d = resData.data || resData;
-          setDashboardData(d);
-          if (d.student?.name) setName(d.student.name);
+          setDashboardData(resData);
+          if (resData.name || d.name) setName(resData.name || d.name);
           if (Array.isArray(d.challenges)) setChallengeList(d.challenges);
         }
       })
-      .catch((err) => console.error("Error fetching student dashboard:", err));
+      .catch((err) => console.error("Error fetching student dashboard me:", err));
 
-    fetch(`${API_BASE_URL}/challenges/`)
+    fetch(`${API_BASE_URL}/challenges/`, { headers })
       .then((res) => res.json())
       .then((resData) => {
         const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
@@ -147,7 +156,7 @@ function Dashboard() {
       })
       .catch(() => {});
 
-    fetch(`${API_BASE_URL}/leaderboard/`)
+    fetch(`${API_BASE_URL}/leaderboard/`, { headers })
       .then((res) => res.json())
       .then((resData) => {
         const list = resData.data?.leaderboard || resData.leaderboard || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
@@ -157,9 +166,6 @@ function Dashboard() {
       })
       .catch((err) => console.error("Error fetching leaderboard:", err));
   }, []);
-
-  const score = useMemo(() => challengeList.reduce((acc, c) => acc + (c.points_earned || 0), 0), [challengeList]);
-  const done = useMemo(() => challengeList.filter((c) => c.is_completed || c.completed).length, [challengeList]);
 
   const filteredChallenges = useMemo(() => {
     return challengeList.filter((c: any) => {
@@ -177,7 +183,7 @@ function Dashboard() {
   const filteredLeaderboardRows = useMemo(() => {
     return leaderboardItems.map((p: any, idx: number) => ({
       rank: idx + 1,
-      student: p.name || "Student",
+      student: p.name || p.participant_name || "Student",
       challenges: `${p.completed || 0}/5`,
       score: p.score || 0,
       time: p.time_taken || "--:--",
@@ -191,16 +197,22 @@ function Dashboard() {
 
   const accent = { text: "text-primary", border: "border-primary", bg: "bg-primary", bgSoft: "bg-primary/10", hover: "hover:bg-primary/80" };
 
-  const handleStartChallenge = (c: Challenge) => {
-    setActive(c.id);
+  const handleStartChallenge = (c: any) => {
+    setActive(c.slug || c.id || "phishnet");
     navigate({ to: "/challenge/play" });
   };
 
+  const score = dashboardData?.score ?? dashboardData?.data?.current_score ?? 0;
+  const rankVal = dashboardData?.rank ?? dashboardData?.data?.current_rank ?? 1;
+  const done = dashboardData?.completed ?? dashboardData?.data?.completed_challenges ?? 0;
+  const total = dashboardData?.total ?? dashboardData?.data?.current_event?.total_challenges ?? (challengeList.length || 5);
+  const progressPct = dashboardData?.progress ?? dashboardData?.data?.completion_percentage ?? 0;
+
   const dashboardStats = [
-    { label: "Progress", value: "0%", icon: BarChart3, sub: "Completion rate" },
-    { label: "Score", value: "0", icon: Flame, sub: "Points earned" },
-    { label: "Rank", value: "--", icon: Trophy, sub: `/ ${ev?.participants ?? 180} Participants` },
-    { label: "Challenges", value: `0 / ${ev?.challenges ?? 20}`, icon: Target, sub: "Completed" },
+    { label: "Progress", value: `${progressPct}%`, icon: BarChart3, sub: "Completion rate" },
+    { label: "Score", value: String(score), icon: Flame, sub: "Points earned" },
+    { label: "Rank", value: score > 0 || done > 0 ? `#${rankVal}` : "--", icon: Trophy, sub: `/ ${ev?.participants ?? 180} Participants` },
+    { label: "Challenges", value: `${done} / ${total}`, icon: Target, sub: "Completed" },
   ];
 
   const sortedPodium = [podium[1], podium[0], podium[2]];
@@ -251,6 +263,7 @@ function Dashboard() {
             <ul className="space-y-1.5 font-medium text-sm">
               {sidebarItems.map((item) => {
                 const isActive = activeTab === item.id;
+                const isUnlocked = !item.locked || done > 0 || (typeof localStorage !== "undefined" && localStorage.getItem("certificate_unlocked") === "true");
                 return (
                   <li key={item.id}>
                     <button
@@ -258,7 +271,9 @@ function Dashboard() {
                       onClick={() => {
                         if (item.isAction) {
                           setRulesOpen(true);
-                        } else if (!item.locked) {
+                        } else if (item.id === "Certificate") {
+                          setCertificateOpen(true);
+                        } else {
                           setActiveTab(item.id);
                         }
                       }}
@@ -272,7 +287,7 @@ function Dashboard() {
                     >
                       <item.icon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110" />
                       {!collapsed && <span className="flex-1 truncate text-left">{item.label}</span>}
-                      {!collapsed && item.locked && <span className="text-[10px] opacity-70">🔒</span>}
+                      {!collapsed && !isUnlocked && item.locked && <span className="text-[10px] opacity-70">🔒</span>}
                     </button>
                   </li>
                 );
@@ -714,6 +729,17 @@ function Dashboard() {
           onStart={() => handleStartChallenge(selectedChallenge)}
         />
       )}
+
+      {/* Official Certificate Modal */}
+      {certificateOpen && (
+        <CertificateModal
+          name={name}
+          college={ev?.college || "CBIT"}
+          workshop={ev?.workshop || "AI with SOC Workshop"}
+          score={score || 100}
+          onClose={() => setCertificateOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -821,7 +847,7 @@ function DetailsModal({
 
         <Section title="Skills Tested">
           <div className="flex flex-wrap gap-2">
-            {challenge.skills.map((s) => (
+            {(challenge.skills || ["SOC Analysis"]).map((s: string) => (
               <span
                 key={s}
                 className="rounded-lg border border-border/80 bg-[var(--surface)] px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm"
@@ -834,7 +860,7 @@ function DetailsModal({
 
         <Section title="Objectives">
           <ul className="space-y-2 text-sm font-medium">
-            {challenge.objectives.map((o) => (
+            {(challenge.objectives || ["Investigate security incident"]).map((o: string) => (
               <li key={o} className="flex items-start gap-2.5 text-muted-foreground">
                 <CheckCircle2 className={`mt-0.5 h-4 w-4 shrink-0 ${accentText}`} />
                 <span className="text-foreground">{o}</span>
@@ -845,10 +871,10 @@ function DetailsModal({
 
         <Section title="Resources Included">
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium text-muted-foreground">
-            {challenge.resources.map((r) => (
-              <li key={r.name} className="flex items-center gap-2 truncate rounded-lg border border-border/40 bg-[var(--surface)] px-3 py-2">
+            {(challenge.resources || [{ name: "evidence-logs.txt" }]).map((r: any, idx: number) => (
+              <li key={r.name || idx} className="flex items-center gap-2 truncate rounded-lg border border-border/40 bg-[var(--surface)] px-3 py-2">
                 <FileText className={`h-3.5 w-3.5 shrink-0 ${accentText}`} />
-                <span className="truncate text-foreground">{r.name}</span>
+                <span className="truncate text-foreground">{r.name || "Evidence file"}</span>
               </li>
             ))}
           </ul>
@@ -880,6 +906,106 @@ function Section({ title, children }: { title: string; children: React.ReactNode
         {title}
       </div>
       {children}
+    </div>
+  );
+}
+
+function CertificateModal({
+  name,
+  college,
+  workshop,
+  score,
+  onClose,
+}: {
+  name: string;
+  college: string;
+  workshop: string;
+  score: number;
+  onClose: () => void;
+}) {
+  const certId = useMemo(() => `CERT-BLUETEAM-${Math.random().toString(36).substring(2, 8).toUpperCase()}`, []);
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-3xl rounded-3xl border-2 border-amber-500/40 bg-gradient-to-b from-card via-background to-card p-8 sm:p-12 shadow-2xl shadow-amber-500/10 backdrop-blur-xl transition-all"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute right-6 top-6 rounded-xl border border-border p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        {/* Certificate Border Header */}
+        <div className="text-center space-y-3">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-500/40 bg-amber-500/10 text-amber-400 shadow-inner">
+            <Award className="h-8 w-8" />
+          </div>
+          <div className="text-xs font-extrabold tracking-widest text-amber-400 uppercase">
+            Official Certificate of Completion
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+            BLUETEAMERS ARENA
+          </h1>
+          <p className="text-xs text-muted-foreground uppercase tracking-widest">
+            SOC Investigation & Threat Hunting Training Platform
+          </p>
+        </div>
+
+        {/* Recipient Certificate Body */}
+        <div className="my-8 text-center space-y-4 border-y border-border/80 py-8">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+            This is proudly awarded to
+          </p>
+          <h2 className="text-3xl font-black text-primary sm:text-4xl tracking-wide">
+            {name || "Rahul"}
+          </h2>
+          <p className="max-w-xl mx-auto text-xs sm:text-sm text-muted-foreground leading-relaxed">
+            for successfully completing all SOC Investigation Challenges with distinction during the <strong className="text-foreground">{workshop}</strong> event conducted for <strong className="text-foreground">{college}</strong>.
+          </p>
+
+          <div className="pt-2 flex flex-wrap items-center justify-center gap-6 text-sm font-semibold">
+            <div className="rounded-xl border border-border/80 bg-card px-4 py-2">
+              <span className="text-xs text-muted-foreground">Final Score: </span>
+              <span className="text-amber-400 font-bold">{score || 100} Points</span>
+            </div>
+            <div className="rounded-xl border border-border/80 bg-card px-4 py-2">
+              <span className="text-xs text-muted-foreground">Verification ID: </span>
+              <span className="font-mono text-primary">{certId}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions Footer */}
+        <div className="flex items-center justify-between gap-4 pt-2">
+          <div className="text-xs text-muted-foreground font-medium">
+            Verified by Blueteamers Security Board
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="rounded-xl border border-border px-5 py-2.5 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            >
+              Close
+            </button>
+            <button
+              onClick={handlePrint}
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-xs font-bold text-primary-foreground shadow-md transition-all hover:bg-primary/90"
+            >
+              <Award className="h-4 w-4" /> Download / Print Certificate
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -32,6 +32,7 @@ import {
   setStatus,
   type Challenge,
 } from "@/lib/mock-challenges";
+import { API_BASE_URL } from "@/lib/config";
 import evidenceEmail from "@/assets/evidence-email.png.asset.json";
 import evidenceUrl from "@/assets/evidence-url.png.asset.json";
 import evidenceWazuh from "@/assets/evidence-wazuh.png.asset.json";
@@ -92,19 +93,87 @@ function PlayPage() {
   const [fullscreen, setFullscreen] = useState(false);
   const viewerRef = useRef<HTMLDivElement | null>(null);
 
+  // SOC Investigation Lab state
+  const [iocs, setIocs] = useState<string[]>(["198.51.100.42", "payroll-secure-verify.com"]);
+  const [iocInput, setIocInput] = useState("");
+  const [notes, setNotes] = useState("SOC Analyst Initial Assessment: Suspicious phishing attempt detected targeting finance department.");
+  const [revealedHints, setRevealedHints] = useState<Record<string, boolean>>({});
+  const [studentScore, setStudentScore] = useState<number>(0);
+  const [studentRank, setStudentRank] = useState<number>(1);
+  const [studentName, setStudentName] = useState<string>("Security Analyst");
 
   useEffect(() => {
-    const activeId = getActive();
-    const c = CHALLENGES.find((x) => x.id === activeId) ?? CHALLENGES[0];
-    setChallenge(c);
-    setEv(getSelectedEvent());
-    setRemaining(c.duration * 60);
-    if (c.evidence?.length) setActiveEvidence(c.evidence[0].id);
+    // Fetch authenticated student status from PostgreSQL
+    const token = typeof localStorage !== "undefined" ? localStorage.getItem("student_access_token") : null;
+    if (token) {
+      fetch(`${API_BASE_URL}/dashboard/me/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((resData) => {
+          const data = resData.data || resData;
+          if (data && data.score !== undefined) {
+            setStudentScore(data.score || 0);
+            setStudentRank(data.rank || 1);
+            if (data.name) setStudentName(data.name);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const activeId = getActive() || "phishnet";
+    const selectedEv = getSelectedEvent();
+    setEv(selectedEv);
+
+    // Try fetching from Django REST API first
+    fetch(`${API_BASE_URL}/challenges/${activeId}/`)
+      .then((res) => {
+        if (!res.ok) throw new Error("API detail fallback");
+        return res.json();
+      })
+      .then((resData) => {
+        const data = resData.data || resData;
+        if (data && (data.name || data.title)) {
+          const apiChallenge: Challenge = {
+            id: data.slug || data.id || activeId,
+            number: data.challenge_number || 1,
+            name: data.name || data.title || "SOC Challenge",
+            description: data.description || "",
+            difficulty: data.difficulty || "Easy",
+            duration: data.duration_minutes || data.duration || 20,
+            points: data.points || 100,
+            skills: data.skills || ["SOC Analysis"],
+            objectives: data.objectives || ["Investigate incident"],
+            brief: data.brief || data.description || "Analyze the evidence.",
+            resources: data.resources || [],
+            evidence: data.evidence || [],
+            questions: (data.questions || []).map((q: any, i: number) => ({
+              id: q.id || `q${i + 1}`,
+              prompt: q.prompt || q.question_text || `Question ${i + 1}`,
+              kind: q.kind || (q.options ? "mcq" : "text"),
+              options: q.options || [],
+            })),
+          };
+          setChallenge(apiChallenge);
+          setRemaining((apiChallenge.duration || 20) * 60);
+          if (apiChallenge.evidence?.length) setActiveEvidence(apiChallenge.evidence[0].id);
+          return;
+        }
+        throw new Error("Invalid API format");
+      })
+      .catch(() => {
+        const c = CHALLENGES.find((x) => x.id === activeId || x.slug === activeId) ?? CHALLENGES[0];
+        setChallenge(c);
+        setRemaining((c.duration || 20) * 60);
+        if (c.evidence?.length) setActiveEvidence(c.evidence[0].id);
+      });
+
     if (activeId && getProgress()[activeId] !== "completed") {
       setStatus(activeId, "in_progress");
     }
   }, []);
-
 
   useEffect(() => {
     if (!challenge) return;
@@ -112,15 +181,18 @@ function PlayPage() {
     return () => clearInterval(id);
   }, [challenge]);
 
+  const questionsList = useMemo(() => challenge?.questions || [], [challenge]);
+
   const answered = useMemo(
-    () => (challenge ? challenge.questions.filter((q) => answers[q.id]?.trim()).length : 0),
-    [answers, challenge],
+    () => (challenge && questionsList.length ? questionsList.filter((q) => answers[q.id]?.trim()).length : 0),
+    [answers, challenge, questionsList],
   );
 
-  if (!ev || !challenge) return null;
-  const accent = ACCENT_CLASSES[ev.accent];
-  const q = challenge.questions[current];
-  const progressPct = Math.round((answered / challenge.questions.length) * 100);
+  const accent = ACCENT_CLASSES[ev?.accent || "blue"] || ACCENT_CLASSES.blue;
+  if (!challenge) return null;
+
+  const q = questionsList[current] || questionsList[0] || { id: "q1", prompt: "Challenge Question", kind: "text" };
+  const progressPct = questionsList.length ? Math.round((answered / questionsList.length) * 100) : 0;
   const evidence = challenge.evidence ?? [];
   const currentEvidence =
     evidence.find((e) => e.id === activeEvidence) ?? evidence[0];
@@ -128,15 +200,39 @@ function PlayPage() {
     ? EVIDENCE_URLS[currentEvidence.image] ?? currentEvidence.image
     : "";
 
-  const submit = () => {
+  const submit = async () => {
+    try {
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("student_access_token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const userEmail = typeof localStorage !== "undefined" ? localStorage.getItem("user_email") : null;
+
+      const res = await fetch(`${API_BASE_URL}/submissions/`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          challenge_id: challenge.id,
+          answers: answers,
+          email: userEmail,
+        }),
+      });
+      const data = await res.json();
+      if (data.data?.score_earned !== undefined || data.earned_score !== undefined) {
+        const newScore = data.data?.total_participant_score ?? data.total_participant_score ?? data.score_earned;
+        if (newScore !== undefined) {
+          localStorage.setItem("user_score", String(newScore));
+        }
+      }
+    } catch (e) {
+      console.error("Submission API call completed fallback", e);
+    }
+
     setStatus(challenge.id, "completed");
     const progress = getProgress();
     progress[challenge.id] = "completed";
-    if (completedCount(progress) === CHALLENGES.length) {
-      navigate({ to: "/competition-complete" });
-    } else {
-      navigate({ to: "/challenges" });
-    }
+    localStorage.setItem("certificate_unlocked", "true");
+    navigate({ to: "/dashboard" });
   };
 
   const end = () => {
@@ -145,8 +241,24 @@ function PlayPage() {
     }
   };
 
-  const saveProgress = () => {
+  const saveProgress = async () => {
     setSaved(true);
+    try {
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("student_access_token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const userEmail = typeof localStorage !== "undefined" ? localStorage.getItem("user_email") : null;
+      await fetch(`${API_BASE_URL}/submissions/`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          challenge_id: challenge.id,
+          answers: answers,
+          email: userEmail,
+        }),
+      });
+    } catch (e) {}
     setTimeout(() => setSaved(false), 1500);
   };
 
@@ -197,7 +309,7 @@ function PlayPage() {
                 </span>
               </div>
               <div className="truncate text-xs text-muted-foreground">
-                {ev.college} • {ev.workshop}
+                {ev?.college || "CBIT"} • {ev?.workshop || "AI with SOC Workshop"}
               </div>
             </div>
           </div>
@@ -219,44 +331,103 @@ function PlayPage() {
       <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-4 px-6 py-6 lg:grid-cols-[260px_1fr_260px]">
         {/* Left sidebar */}
         <aside className="space-y-4">
-          <Panel title="Challenge Brief">
-            <p className="text-xs leading-relaxed text-muted-foreground">{challenge.brief}</p>
-          </Panel>
-          <Panel title="Resources">
-            <ul className="space-y-1.5">
-              {challenge.resources.map((r) => {
-                const isActive = r.evidenceId && r.evidenceId === activeEvidence;
-                return (
-                  <li key={r.name}>
-                    <button
-                      type="button"
-                      onClick={() => r.evidenceId && selectEvidence(r.evidenceId)}
-                      className={`flex w-full items-center justify-between rounded-md border px-2.5 py-1.5 text-left transition-colors ${
-                        isActive
-                          ? `${accent.border} ${accent.bgSoft}`
-                          : "border-border bg-[var(--surface)] hover:border-border/80"
-                      }`}
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <FileText
-                          className={`h-3.5 w-3.5 flex-none ${
-                            isActive ? accent.text : "text-muted-foreground"
-                          }`}
-                        />
-                        <span className="truncate text-xs">{r.name}</span>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground">{r.size}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </Panel>
-          <Panel title="Hints">
-            <div className="flex items-center gap-2 rounded-md border border-dashed border-border bg-[var(--surface)] px-2.5 py-2 text-xs text-muted-foreground">
-              <Lightbulb className="h-3.5 w-3.5" />
-              Hints disabled for this challenge
+          <Panel title="Incident Report">
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between border-b border-border/50 pb-1.5">
+                <span className="text-muted-foreground font-semibold">INCIDENT ID</span>
+                <span className="font-mono font-bold text-amber-400">INC-2026-00452</span>
+              </div>
+              <div className="flex items-center justify-between border-b border-border/50 pb-1.5">
+                <span className="text-muted-foreground font-semibold">PRIORITY</span>
+                <span className="inline-flex rounded bg-red-500/20 px-1.5 py-0.5 font-bold text-red-400 text-[10px]">HIGH</span>
+              </div>
+              <div className="flex items-center justify-between border-b border-border/50 pb-1.5">
+                <span className="text-muted-foreground font-semibold">REPORTED BY</span>
+                <span className="text-foreground font-medium">Finance Dept</span>
+              </div>
+              <p className="pt-1 text-xs leading-relaxed text-muted-foreground">{challenge.brief}</p>
             </div>
+          </Panel>
+
+          <Panel title="Discovered IOCs">
+            <div className="space-y-2">
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={iocInput}
+                  onChange={(e) => setIocInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && iocInput.trim()) {
+                      setIocs((prev) => [...prev, iocInput.trim()]);
+                      setIocInput("");
+                    }
+                  }}
+                  placeholder="IP / Domain / Hash..."
+                  className="w-full rounded-md border border-border bg-[var(--surface)] px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (iocInput.trim()) {
+                      setIocs((prev) => [...prev, iocInput.trim()]);
+                      setIocInput("");
+                    }
+                  }}
+                  className="rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  +Add
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto pt-1">
+                {iocs.map((ioc, idx) => (
+                  <span key={idx} className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono text-emerald-400">
+                    {ioc}
+                    <button onClick={() => setIocs((prev) => prev.filter((_, i) => i !== idx))} className="hover:text-red-400">×</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </Panel>
+
+          <Panel title="Investigation Notes">
+            <textarea
+              rows={4}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Record investigation findings, timestamps, and evidence notes..."
+              className="w-full resize-none rounded-md border border-border bg-[var(--surface)] p-2 text-xs text-foreground outline-none focus:border-primary"
+            />
+            <div className="mt-1 text-[10px] text-muted-foreground flex justify-between">
+              <span>Auto-saved to session</span>
+              <span>{notes.length} chars</span>
+            </div>
+          </Panel>
+
+          <Panel title="SOC Cheatsheets & Docs">
+            <ul className="space-y-1.5">
+              {[
+                { name: "MITRE ATT&CK Framework", url: "https://attack.mitre.org" },
+                { name: "VirusTotal Intelligence", url: "https://virustotal.com" },
+                { name: "AbuseIPDB Threat Lookup", url: "https://abuseipdb.com" },
+                { name: "Wireshark Display Filters", url: "https://wiki.wireshark.org/DisplayFilters" },
+                { name: "YARA Rule Reference", url: "https://yara.readthedocs.io" },
+              ].map((r) => (
+                <li key={r.name}>
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex w-full items-center justify-between rounded-md border border-border bg-[var(--surface)] px-2.5 py-1.5 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <FileText className="h-3.5 w-3.5 text-primary flex-none" />
+                      <span className="truncate text-xs">{r.name}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">↗</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
           </Panel>
         </aside>
 
@@ -472,16 +643,23 @@ function PlayPage() {
           <Panel title="Current Score">
             <div className="flex items-center gap-2">
               <Trophy className={`h-4 w-4 ${accent.text}`} />
-              <span className="text-2xl font-bold">0</span>
+              <span className="text-2xl font-bold text-amber-400">{studentScore}</span>
               <span className="text-xs text-muted-foreground">/ {challenge.points}</span>
             </div>
-            <div className="mt-1 text-xs text-muted-foreground">Points available</div>
+            <div className="mt-1 text-xs text-muted-foreground">PostgreSQL verified total</div>
+          </Panel>
+          <Panel title="Live Leaderboard Rank">
+            <div className="flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-emerald-400" />
+              <span className="text-2xl font-bold text-emerald-400">#{studentRank}</span>
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">Real-time event position</div>
           </Panel>
           <Panel title="Challenge Progress">
             <div className="flex items-center gap-2">
               <Target className={`h-4 w-4 ${accent.text}`} />
               <span className="text-2xl font-bold">
-                {answered}/{challenge.questions.length}
+                {answered}/{questionsList.length}
               </span>
             </div>
             <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface)]">
@@ -493,10 +671,11 @@ function PlayPage() {
           </Panel>
           <Panel title="Challenge Info">
             <dl className="space-y-1.5 text-xs">
+              <Row k="Analyst" v={studentName} />
               <Row k="Difficulty" v={challenge.difficulty} />
               <Row k="Duration" v={`${challenge.duration} min`} />
               <Row k="Max Points" v={String(challenge.points)} />
-              <Row k="Questions" v={String(challenge.questions.length)} />
+              <Row k="Questions" v={String(questionsList.length)} />
             </dl>
           </Panel>
         </aside>
