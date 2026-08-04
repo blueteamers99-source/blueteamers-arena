@@ -227,35 +227,6 @@ export default function EventDetailsPage() {
                 </div>
               </div>
             </div>
-
-            {/* Contact Information */}
-            <div className="rounded-2xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl shadow-black/30">
-              <div className="flex items-center gap-3 border-b border-border/60 pb-4 mb-6">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-500/10 text-blue-400">
-                  <UserCheck className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-foreground">Contact Information</h2>
-                  <p className="text-xs text-muted-foreground">Have questions about the event? Reach out to the event coordinator</p>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-border/60 bg-[var(--surface)] p-5">
-                <div className="text-sm font-bold text-foreground">{ev.coordinator?.name || "John Doe"}</div>
-                <div className="text-xs text-muted-foreground">{ev.coordinator?.role || "Workshop Coordinator"}</div>
-
-                <div className="mt-4 flex flex-wrap gap-4 text-xs font-medium text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-primary" />
-                    <span>{ev.coordinator?.email || "coordinator@blueteamers.io"}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-primary" />
-                    <span>{ev.coordinator?.phone || "+91 98765 43210"}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Right Column: Sticky Event Details Card UI (4 cols) */}
