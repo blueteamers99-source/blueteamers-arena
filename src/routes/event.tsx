@@ -56,7 +56,7 @@ export default function EventDetailsPage() {
     if (ev?.code) {
       saveSelectedEvent(ev.code);
     }
-    navigate({ to: "/arena" });
+    navigate({ to: "/student" });
   };
 
   const handleCopyCode = () => {
