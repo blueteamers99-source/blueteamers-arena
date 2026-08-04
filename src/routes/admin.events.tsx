@@ -785,7 +785,7 @@ function EditEventModal({
       <form
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-border/80 bg-card shadow-2xl space-y-4 p-5 sm:p-6 backdrop-blur-xl animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border/80 bg-card shadow-2xl space-y-4 p-5 sm:p-6 backdrop-blur-xl animate-in zoom-in-95 duration-200"
       >
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/80 via-primary to-primary/40" />
 
@@ -967,7 +967,7 @@ function CreateEventModal({
       <form
         onSubmit={publish}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border/80 bg-card shadow-2xl space-y-4 p-5 sm:p-6 backdrop-blur-xl animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border/80 bg-card shadow-2xl space-y-4 p-5 sm:p-6 backdrop-blur-xl animate-in zoom-in-95 duration-200"
       >
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/80 via-primary to-primary/40" />
 
