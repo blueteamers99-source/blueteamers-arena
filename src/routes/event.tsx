@@ -176,53 +176,6 @@ export default function EventDetailsPage() {
               </ul>
             </div>
 
-            {/* Tools Used */}
-            <div className="rounded-2xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl shadow-black/30">
-              <div className="flex items-center gap-3 border-b border-border/60 pb-4 mb-6">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-purple-500/10 text-purple-400">
-                  <Wrench className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-foreground">Tools Used</h2>
-                  <p className="text-xs text-muted-foreground">Industry & SOC tools demonstrated or utilized in this workshop</p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2.5">
-                {(ev.toolsUsed || []).map((tool) => (
-                  <span
-                    key={tool}
-                    className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-[var(--surface)] px-4 py-2.5 text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
-                  >
-                    <ShieldCheck className="h-4 w-4 text-primary" />
-                    {tool}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Benefits */}
-            <div className="rounded-2xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl shadow-black/30">
-              <div className="flex items-center gap-3 border-b border-border/60 pb-4 mb-6">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-amber-500/10 text-amber-400">
-                  <Trophy className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-foreground">Benefits</h2>
-                  <p className="text-xs text-muted-foreground">What you gain by participating in Blueteamers Arena</p>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                {(ev.benefits || []).map((b) => (
-                  <div key={b} className="flex items-center gap-3 rounded-xl border border-border/60 bg-[var(--surface)] p-3.5">
-                    <Award className="h-4 w-4 text-amber-400 shrink-0" />
-                    <span className="text-xs sm:text-sm font-semibold text-foreground">{b}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* Event Rules */}
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6 sm:p-8 shadow-xl">
               <div className="flex items-center gap-3 border-b border-amber-500/20 pb-4 mb-6">
