@@ -4,11 +4,6 @@ import {
   ShieldCheck,
   Brain,
   Trophy,
-  Target,
-  Siren,
-  FileText,
-  Mail,
-  LineChart,
   Linkedin,
   Instagram,
   Youtube,
@@ -40,15 +35,6 @@ const features = [
     description: "Compete with students across multiple colleges.",
     tint: "bg-amber-500/10 text-amber-400",
   },
-];
-
-const categories = [
-  { icon: ShieldCheck, label: "AI with SOC", tint: "text-blue-400" },
-  { icon: Target, label: "Threat Hunting", tint: "text-emerald-400" },
-  { icon: Siren, label: "Incident Response", tint: "text-red-400" },
-  { icon: FileText, label: "Log Analysis", tint: "text-orange-400" },
-  { icon: Mail, label: "Phishing Analysis", tint: "text-violet-400" },
-  { icon: LineChart, label: "SIEM & Tools", tint: "text-sky-400" },
 ];
 
 function Logo() {
@@ -97,7 +83,7 @@ function GhostButton({
   const navigate = useNavigate();
   return (
     <button
-      onClick={onClick ?? (() => navigate({ to: "/challenges" }))}
+      onClick={onClick ?? (() => navigate({ to: "/about" }))}
       className={`inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-transparent px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-card ${className}`}
     >
       {children}
@@ -120,6 +106,13 @@ function AppPreview() {
 }
 
 function Hero() {
+  const scrollToAbout = () => {
+    const el = document.getElementById("about-us");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
   return (
     <section className="mx-auto grid max-w-[1400px] grid-cols-1 items-center gap-12 px-6 pt-14 pb-16 lg:grid-cols-2 lg:pt-20 lg:pb-22">
       <div>
@@ -136,7 +129,7 @@ function Hero() {
           <PrimaryButton>
             Enter Arena <ArrowRight className="h-4 w-4" />
           </PrimaryButton>
-          <GhostButton>View Challenges</GhostButton>
+          <GhostButton onClick={scrollToAbout}>About Us</GhostButton>
         </div>
       </div>
       <div className="lg:-ml-3">
@@ -168,22 +161,25 @@ function Features() {
   );
 }
 
-function Categories() {
+function AboutSection() {
+  const navigate = useNavigate();
   return (
-    <section id="challenges" className="mx-auto max-w-[1400px] px-6 py-20">
-      <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">
-        Challenge Categories
-      </h2>
-      <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        {categories.map((c) => (
-          <div
-            key={c.label}
-            className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-5 transition-colors hover:border-primary/40"
+    <section id="about-us" className="mx-auto max-w-[1400px] px-6 py-20">
+      <div className="mx-auto max-w-3xl text-center">
+        <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
+          About <span className="text-primary">Blueteamers Arena</span>
+        </h2>
+        <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
+          Blueteamers Arena is a hands-on cybersecurity platform built to empower the next generation of defenders. We provide realistic SOC simulation environments, AI-assisted threat hunting tools, and competitive arenas where security analysts can hone their defensive skills.
+        </p>
+        <div className="mt-8 flex justify-center">
+          <button
+            onClick={() => navigate({ to: "/about" })}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-[var(--primary-hover)] focus:outline-none"
           >
-            <c.icon className={`h-5 w-5 shrink-0 ${c.tint}`} />
-            <span className="text-sm font-medium">{c.label}</span>
-          </div>
-        ))}
+            Learn More About Us <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -229,7 +225,7 @@ function Landing() {
       <Navbar />
       <Hero />
       <Features />
-      <Categories />
+      <AboutSection />
       <FinalCTA />
       <Footer />
     </main>

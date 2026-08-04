@@ -45,7 +45,14 @@ import {
   type ProgressMap,
 } from "@/lib/mock-challenges";
 
+type DashboardSearch = {
+  tab?: string;
+};
+
 export const Route = createFileRoute("/dashboard")({
+  validateSearch: (search: Record<string, unknown>): DashboardSearch => ({
+    tab: (search?.tab as string) || undefined,
+  }),
   component: Dashboard,
   head: () => ({
     meta: [
@@ -91,7 +98,14 @@ type LeaderboardFilter = "All" | "Completed" | "Running";
 
 function Dashboard() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<string>("Dashboard");
+  const searchParams = Route.useSearch();
+  const [activeTab, setActiveTab] = useState<string>(() => searchParams?.tab || "Dashboard");
+
+  useEffect(() => {
+    if (searchParams?.tab) {
+      setActiveTab(searchParams.tab);
+    }
+  }, [searchParams?.tab]);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [name, setName] = useState("Student");

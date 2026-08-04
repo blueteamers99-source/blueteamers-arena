@@ -449,13 +449,21 @@ function DetailsModal({
   onClose: () => void;
   onEnterCode: () => void;
 }) {
+  const navigate = useNavigate();
+
+  const handleFullDetails = () => {
+    saveSelectedEvent(event.code);
+    onClose();
+    navigate({ to: "/event" });
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[540px] rounded-2xl border border-border/80 bg-card p-6 sm:p-7 shadow-2xl shadow-black/90 transition-all transform animate-in zoom-in-95 duration-200"
+        className="w-full max-w-[580px] rounded-2xl border border-border/80 bg-card p-6 sm:p-7 shadow-2xl shadow-black/90 transition-all transform animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between pb-3.5 border-b border-border/60">
@@ -479,13 +487,13 @@ function DetailsModal({
         </div>
 
         <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          Official cybersecurity investigation workshop for <strong className="text-foreground">{event.college}</strong>. Real-time SOC log analysis & threat hunting simulation.
+          {event.description || `Official cybersecurity investigation workshop for ${event.college}. Real-time SOC log analysis, phishing detection & threat hunting simulation.`}
         </p>
 
-        <div className="mt-4 grid grid-cols-2 gap-2.5 text-center">
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2 text-center">
           <div className="rounded-xl border border-border/60 bg-[var(--surface)] p-2.5 shadow-inner">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">College</div>
-            <div className="mt-0.5 text-sm font-bold text-foreground truncate">{event.college}</div>
+            <div className="mt-0.5 text-xs font-bold text-foreground truncate">{event.college}</div>
           </div>
           <div className="rounded-xl border border-border/60 bg-[var(--surface)] p-2.5 shadow-inner">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Event Code</div>
@@ -493,24 +501,35 @@ function DetailsModal({
           </div>
           <div className="rounded-xl border border-border/60 bg-[var(--surface)] p-2.5 shadow-inner">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Participants</div>
-            <div className="mt-0.5 text-sm font-bold text-foreground">{event.participants}</div>
+            <div className="mt-0.5 text-xs font-bold text-foreground">{event.participants} Max</div>
           </div>
           <div className="rounded-xl border border-border/60 bg-[var(--surface)] p-2.5 shadow-inner">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Status</div>
-            <div className="mt-0.5 text-xs font-bold text-foreground flex justify-center">{event.status}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Mode</div>
+            <div className="mt-0.5 text-xs font-bold text-emerald-400">Offline / Hybrid</div>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-[var(--surface)] p-2.5 shadow-inner">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Pass Score</div>
+            <div className="mt-0.5 text-xs font-bold text-amber-400">350 / 500</div>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-[var(--surface)] p-2.5 shadow-inner">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Certificate</div>
+            <div className="mt-0.5 text-xs font-bold text-emerald-400">Available</div>
           </div>
         </div>
 
-        <div className="mt-5 flex items-center gap-3 border-t border-border/60 pt-4">
+        <div className="mt-5 flex flex-col sm:flex-row items-center gap-2.5 border-t border-border/60 pt-4">
           <button
-            onClick={onClose}
-            className="w-1/3 rounded-xl border border-border py-2.5 text-xs font-bold text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            onClick={handleFullDetails}
+            className="w-full sm:w-1/2 inline-flex items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-xs font-bold text-foreground hover:bg-accent transition-colors"
           >
-            Close
+            View Full Event Page
           </button>
           <button
-            onClick={onEnterCode}
-            className={`w-2/3 inline-flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold text-white shadow-md transition-all ${accentBg} ${accentHover}`}
+            onClick={() => {
+              saveSelectedEvent(event.code);
+              onEnterCode();
+            }}
+            className={`w-full sm:w-1/2 inline-flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold text-white shadow-md transition-all ${accentBg} ${accentHover}`}
           >
             <KeyRound className="h-4 w-4" /> Enter Event Code
           </button>

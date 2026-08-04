@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Shield, Target, Users, Zap, Linkedin, Instagram, Youtube } from "lucide-react";
+import { Lock, Laptop, GraduationCap, Users, Linkedin, Instagram, Youtube } from "lucide-react";
 
 import { Navbar } from "@/components/Navbar";
 
@@ -19,17 +19,17 @@ export const Route = createFileRoute("/about")({
 
 const values = [
     {
-        icon: Shield,
+        icon: Lock,
         title: "Practical Defense",
         description: "We focus on real-world SOC workflows, not theory. Every challenge is built from incident patterns blue teams face daily.",
     },
     {
-        icon: Zap,
+        icon: Laptop,
         title: "AI-Powered Training",
         description: "We integrate AI tools the way modern security operations use them, teaching analysts to validate and act on machine-generated insights.",
     },
     {
-        icon: Target,
+        icon: GraduationCap,
         title: "Scenario-Based Learning",
         description: "From phishing to forensics, each investigation is a complete narrative with evidence, questions, and clear objectives.",
     },
