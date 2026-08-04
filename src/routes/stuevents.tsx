@@ -244,7 +244,7 @@ export default function StuEvents({ hideNav }: { hideNav?: boolean } = {}) {
           onClose={() => setSelected(null)}
           onEnterCode={() => {
             setSelected(null);
-            navigate({ to: "/event" });
+            navigate({ to: "/student" });
           }}
         />
       )}
@@ -256,7 +256,7 @@ export default function StuEvents({ hideNav }: { hideNav?: boolean } = {}) {
           onSuccess={(validatedEvent) => {
             setShowCodeModal(false);
             saveSelectedEvent(validatedEvent.event_code || "CBIT-3154");
-            navigate({ to: "/event" });
+            navigate({ to: "/student" });
           }}
         />
       )}
