@@ -29,6 +29,9 @@ import { ACCENT_CLASSES, getSelectedEvent, saveSelectedEvent, type MockEvent } f
 import { Navbar } from "@/components/Navbar";
 
 export const Route = createFileRoute("/event")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    verified: search?.verified === "true" || search?.verified === true ? "true" : undefined,
+  }),
   component: EventDetailsPage,
   head: () => ({
     meta: [
@@ -42,8 +45,13 @@ export const Route = createFileRoute("/event")({
 
 export default function EventDetailsPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const [ev, setEv] = useState<MockEvent | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const isVerified =
+    search?.verified === "true" ||
+    (typeof sessionStorage !== "undefined" && sessionStorage.getItem("is_code_verified") === "true");
 
   useEffect(() => {
     setEv(getSelectedEvent());
@@ -261,13 +269,24 @@ export default function EventDetailsPage() {
 
                 {/* Primary CTA */}
                 <div className="mt-6 space-y-3">
-                  <button
-                    onClick={handleEnterArena}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 text-sm font-extrabold text-primary-foreground shadow-lg transition-all hover:bg-primary/90 hover:shadow-primary/20 cursor-pointer"
-                  >
-                    Continue
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
+                  {isVerified ? (
+                    <button
+                      onClick={handleEnterArena}
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 text-sm font-extrabold text-primary-foreground shadow-lg transition-all hover:bg-primary/90 hover:shadow-primary/20 cursor-pointer"
+                    >
+                      Continue
+                      <ArrowRight className="h-4 w-4" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => navigate({ to: "/arena" })}
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 text-sm font-extrabold text-primary-foreground shadow-lg transition-all hover:bg-primary/90 hover:shadow-primary/20 cursor-pointer"
+                    >
+                      <KeyRound className="h-4.5 w-4.5" />
+                      Enter Event Code
+                      <ArrowRight className="h-4 w-4" />
+                    </button>
+                  )}
                   <p className="text-[11px] text-center text-muted-foreground font-medium">
                     Use event code <span className="font-mono font-bold text-primary">{ev.code}</span> to unlock challenge questions
                   </p>

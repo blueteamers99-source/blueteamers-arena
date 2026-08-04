@@ -244,7 +244,7 @@ export default function StuEvents({ hideNav }: { hideNav?: boolean } = {}) {
           onClose={() => setSelected(null)}
           onEnterCode={() => {
             setSelected(null);
-            navigate({ to: "/event" });
+            setShowCodeModal(true);
           }}
         />
       )}
@@ -256,7 +256,10 @@ export default function StuEvents({ hideNav }: { hideNav?: boolean } = {}) {
           onSuccess={(validatedEvent) => {
             setShowCodeModal(false);
             saveSelectedEvent(validatedEvent.event_code || "CBIT-3154");
-            navigate({ to: "/event" });
+            if (typeof sessionStorage !== "undefined") {
+              sessionStorage.setItem("is_code_verified", "true");
+            }
+            navigate({ to: "/event", search: { verified: "true" } });
           }}
         />
       )}
@@ -454,8 +457,11 @@ function DetailsModal({
 
   const handleFullDetails = () => {
     saveSelectedEvent(event.code);
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem("is_code_verified");
+    }
     onClose();
-    navigate({ to: "/event" });
+    navigate({ to: "/event", search: { verified: undefined } });
   };
 
   return (

@@ -59,8 +59,11 @@ function Arena() {
 
     const res = await validateCode(code);
     if (res.success) {
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem("is_code_verified", "true");
+      }
       setTimeout(() => {
-        navigate({ to: "/event" });
+        navigate({ to: "/event", search: { verified: "true" } });
       }, 500);
     }
   };
