@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
@@ -40,6 +40,7 @@ export const Route = createFileRoute("/admin/dashboard")({
 type LeaderboardFilter = "All" | "Completed" | "Running";
 
 function AdminDashboard() {
+  const navigate = useNavigate();
   const search = Route.useSearch();
   const [activeTab, setActiveTab] = useState<string>(search.tab || "dashboard");
   const [lbSearch, setLbSearch] = useState("");
@@ -60,8 +61,18 @@ function AdminDashboard() {
   useEffect(() => {
     if (search.tab) {
       setActiveTab(search.tab);
+    } else {
+      setActiveTab("dashboard");
     }
   }, [search.tab]);
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    navigate({
+      to: "/admin/dashboard",
+      search: { tab: tabId === "dashboard" ? undefined : tabId },
+    });
+  };
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/admin/dashboard/`)
@@ -149,7 +160,7 @@ function AdminDashboard() {
   });
 
   return (
-    <AdminLayout activeId={activeTab as any} onTabChange={(tab) => setActiveTab(tab)}>
+    <AdminLayout activeId={activeTab as any} onTabChange={handleTabChange}>
       {activeTab === "dashboard" ? (
         <>
           <div>

@@ -26,6 +26,7 @@ import {
   Calendar,
 } from "lucide-react";
 import StuEvents from "./stuevents";
+import ChallengesPage from "@/components/ChallengesPage";
 import { API_BASE_URL } from "@/lib/config";
 import {
   ACCENT_CLASSES,
@@ -99,13 +100,35 @@ type LeaderboardFilter = "All" | "Completed" | "Running";
 function Dashboard() {
   const navigate = useNavigate();
   const searchParams = Route.useSearch();
-  const [activeTab, setActiveTab] = useState<string>(() => searchParams?.tab || "Dashboard");
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const rawTab = searchParams?.tab;
+    if (!rawTab) return "Dashboard";
+    const found = sidebarItems.find(
+      (item) => item.id.toLowerCase() === rawTab.toLowerCase()
+    );
+    return found ? found.id : "Dashboard";
+  });
 
   useEffect(() => {
     if (searchParams?.tab) {
-      setActiveTab(searchParams.tab);
+      const match = sidebarItems.find(
+        (item) => item.id.toLowerCase() === searchParams.tab?.toLowerCase()
+      );
+      if (match) {
+        setActiveTab(match.id);
+      }
+    } else {
+      setActiveTab("Dashboard");
     }
   }, [searchParams?.tab]);
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    navigate({
+      to: "/dashboard",
+      search: { tab: tabId === "Dashboard" ? undefined : tabId },
+    });
+  };
   const [rulesOpen, setRulesOpen] = useState(false);
   const [certificateOpen, setCertificateOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -274,7 +297,7 @@ function Dashboard() {
                         } else if (item.id === "Certificate") {
                           setCertificateOpen(true);
                         } else {
-                          setActiveTab(item.id);
+                          handleTabChange(item.id);
                         }
                       }}
                       className={`group w-full flex items-center gap-3 rounded-xl transition-all duration-200 cursor-pointer ${
@@ -433,100 +456,7 @@ function Dashboard() {
         )}
 
         {/* Tab 2: Challenges List */}
-        {activeTab === "Challenges" && (
-          <div className="p-6 lg:p-8 space-y-6 w-full max-w-[1600px]">
-            {/* Section Header & Filter Controls */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-2xl font-extrabold tracking-tight">Investigation Challenges</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Complete challenges in any order. Only one challenge can be active at a time.
-                </p>
-              </div>
-
-              {/* Search & Filter Inputs */}
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative min-w-[240px]">
-                  <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={challengeSearch}
-                    onChange={(e) => setChallengeSearch(e.target.value)}
-                    placeholder="Search challenges..."
-                    className="w-full rounded-xl border border-border/80 bg-card py-2 pl-9 pr-4 text-sm outline-none focus:border-primary"
-                  />
-                </div>
-
-                <div className="flex items-center gap-1 rounded-xl border border-border/80 bg-card p-1">
-                  {["All", "Easy", "Medium", "Hard"].map((diff) => (
-                    <button
-                      key={diff}
-                      onClick={() => setFilterDifficulty(diff)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
-                        filterDifficulty.toLowerCase() === diff.toLowerCase()
-                          ? `${accent.bg} text-white shadow-sm`
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {diff}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Challenges List */}
-            <ul className="space-y-4">
-              {filteredChallenges.map((c) => {
-                const status = (c.is_completed || c.completed) ? "completed" : "not_started";
-                const diffBadge = (DIFFICULTY_BADGE as any)[c.difficulty] || "border-blue-500/30 bg-blue-500/10 text-blue-400";
-                return (
-                  <li key={c.id}>
-                    <button
-                      onClick={() => setSelectedChallenge(c)}
-                      className="group relative flex w-full items-center gap-5 rounded-2xl border border-border/80 bg-card p-6 text-left shadow-lg shadow-black/20 backdrop-blur-sm transition-all duration-300 hover:border-primary/50 hover:bg-card/95 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5 cursor-pointer"
-                    >
-                      <div
-                        className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl font-bold text-lg shadow-inner ${accent.bgSoft} ${accent.text} border border-border/40 group-hover:scale-105 transition-transform`}
-                      >
-                        {c.number || 1}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2.5">
-                          <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
-                            {c.title || c.name}
-                          </h3>
-                          <span
-                            className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide ${diffBadge}`}
-                          >
-                            {c.difficulty}
-                          </span>
-                          <StatusBadge status={status} />
-                        </div>
-                        <p className="mt-1.5 truncate text-xs sm:text-sm leading-relaxed text-muted-foreground">
-                          {c.description}
-                        </p>
-                      </div>
-
-                      <div className="hidden shrink-0 items-center gap-6 text-right sm:flex">
-                        <div className="rounded-xl border border-border/60 bg-[var(--surface)]/80 px-4 py-2 text-center shadow-inner">
-                          <div className="text-xs font-semibold text-foreground">{c.duration} mins</div>
-                          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mt-0.5">Duration</div>
-                        </div>
-                        <div className="rounded-xl border border-border/60 bg-[var(--surface)]/80 px-4 py-2 text-center shadow-inner">
-                          <div className="text-xs font-semibold text-foreground">{c.points} pts</div>
-                          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mt-0.5">Reward</div>
-                        </div>
-                        <ArrowRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
-                      </div>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
+        {activeTab === "Challenges" && <ChallengesPage hideNav />}
 
         {/* Tab 3: Embedded Leaderboard View */}
         {activeTab === "Leaderboard" && (
@@ -708,7 +638,7 @@ function Dashboard() {
             <button
               onClick={() => {
                 setRulesOpen(false);
-                setActiveTab("Challenges");
+                handleTabChange("Challenges");
               }}
               className={`mt-8 block w-full rounded-xl ${accent.bg} ${accent.hover} px-5 py-3.5 text-center text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]`}
             >
