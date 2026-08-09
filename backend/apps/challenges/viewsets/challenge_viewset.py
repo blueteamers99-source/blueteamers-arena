@@ -29,7 +29,7 @@ class ChallengeViewSet(viewsets.ModelViewSet):
     authentication_classes = [ParticipantTokenAuthentication]
 
     def get_permissions(self):
-        if self.action in ["list", "retrieve", "evidence", "submit", "create"]:
+        if self.action in ["list", "retrieve", "evidence", "submit", "create", "start", "save_progress"]:
             return [AllowAny()]
         return [IsAdmin()]
 
@@ -144,3 +144,62 @@ class ChallengeViewSet(viewsets.ModelViewSet):
             data=SubmissionSerializer(submission).data,
             message=f"Answers for '{challenge.name}' submitted and graded successfully!",
         )
+
+    @extend_schema(responses={200: dict})
+    @action(detail=True, methods=["post"], url_path="start")
+    def start(self, request, slug=None):
+        challenge = ChallengeSelector.get_by_slug_or_id(slug)
+        if not challenge:
+            return Response({"success": False, "message": "Challenge not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        participant = getattr(request, "participant", None)
+        if participant:
+            from apps.participants.models.participant_progress import ParticipantProgress
+            from django.utils import timezone
+            prog, _ = ParticipantProgress.objects.get_or_create(
+                participant=participant,
+                challenge=challenge,
+                defaults={"status": ParticipantProgress.StatusChoices.IN_PROGRESS, "started_at": timezone.now()}
+            )
+            if prog.status == ParticipantProgress.StatusChoices.NOT_STARTED:
+                prog.status = ParticipantProgress.StatusChoices.IN_PROGRESS
+                prog.started_at = timezone.now()
+                prog.save()
+
+        return Response({
+            "success": True,
+            "message": f"Challenge '{challenge.name}' started successfully.",
+            "challenge_id": str(challenge.slug),
+            "status": "in_progress",
+        }, status=status.HTTP_200_OK)
+
+    @extend_schema(responses={200: dict})
+    @action(detail=True, methods=["post"], url_path="save-progress")
+    def save_progress(self, request, slug=None):
+        challenge = ChallengeSelector.get_by_slug_or_id(slug)
+        if not challenge:
+            return Response({"success": False, "message": "Challenge not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        participant = getattr(request, "participant", None)
+        if participant:
+            from apps.participants.models.participant_progress import ParticipantProgress
+            prog, _ = ParticipantProgress.objects.get_or_create(
+                participant=participant,
+                challenge=challenge,
+            )
+            answers = request.data.get("answers") or {}
+            curr_idx = request.data.get("current_question_index", 0)
+            visited = request.data.get("visited_questions", [])
+            time_rem = request.data.get("remaining_seconds", 0)
+
+            prog.draft_answers = answers
+            prog.current_question_index = curr_idx
+            prog.visited_questions = visited
+            prog.remaining_seconds = time_rem
+            prog.save()
+
+        return Response({
+            "success": True,
+            "message": "Challenge progress saved successfully.",
+        }, status=status.HTTP_200_OK)
+

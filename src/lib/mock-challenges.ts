@@ -258,3 +258,118 @@ export const DIFFICULTY_BADGE: Record<Difficulty, string> = {
   Medium: "bg-amber-500/10 text-amber-400 border-amber-500/30",
   Hard: "bg-rose-500/10 text-rose-400 border-rose-500/30",
 };
+
+import { API_BASE_URL } from "./config";
+
+export async function fetchChallengesApi(): Promise<Challenge[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/challenges/`);
+    if (!res.ok) return CHALLENGES;
+    const json = await res.json();
+    const list = json.results || json.data || json;
+    if (Array.isArray(list) && list.length > 0) {
+      return list.map((item: any) => ({
+        id: item.id || item.slug,
+        number: item.number || item.challenge_number || 1,
+        name: item.name,
+        description: item.description,
+        difficulty: item.difficulty,
+        duration: item.duration || item.duration_minutes || 20,
+        points: item.points || 100,
+        skills: item.skills || [],
+        objectives: item.objectives || [],
+        brief: item.brief || item.description,
+        resources: item.resources || [],
+        evidence: item.evidence || [],
+        questions: item.questions || [],
+      }));
+    }
+  } catch {
+    // fallback
+  }
+  return CHALLENGES;
+}
+
+export async function fetchChallengeDetailApi(id: string): Promise<Challenge | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/challenges/${id}/`);
+    if (!res.ok) return CHALLENGES.find((c) => c.id === id) || null;
+    const json = await res.json();
+    const item = json.challenge || json.data || json;
+    if (item && item.name) {
+      return {
+        id: item.id || item.slug || id,
+        number: item.number || item.challenge_number || 1,
+        name: item.name,
+        description: item.description,
+        difficulty: item.difficulty,
+        duration: item.duration || item.duration_minutes || 20,
+        points: item.points || 100,
+        skills: item.skills || [],
+        objectives: item.objectives || [],
+        brief: item.brief || item.description,
+        resources: item.resources || [],
+        evidence: item.evidence || [],
+        questions: item.questions || [],
+      };
+    }
+  } catch {
+    // fallback
+  }
+  return CHALLENGES.find((c) => c.id === id) || null;
+}
+
+export async function startChallengeApi(id: string): Promise<void> {
+  setActive(id);
+  setStatus(id, "in_progress");
+  try {
+    const token = localStorage.getItem("blueteamers_participant_token") || sessionStorage.getItem("blueteamers_participant_token");
+    await fetch(`${API_BASE_URL}/challenges/${id}/start/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  } catch {
+    // silent
+  }
+}
+
+export async function saveProgressApi(id: string, answers: Record<string, string>): Promise<void> {
+  try {
+    const token = localStorage.getItem("blueteamers_participant_token") || sessionStorage.getItem("blueteamers_participant_token");
+    await fetch(`${API_BASE_URL}/challenges/${id}/save-progress/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ answers }),
+    });
+  } catch {
+    // silent
+  }
+}
+
+export async function submitChallengeApi(id: string, answers: Record<string, string>): Promise<any> {
+  setStatus(id, "completed");
+  try {
+    const token = localStorage.getItem("blueteamers_participant_token") || sessionStorage.getItem("blueteamers_participant_token");
+    const res = await fetch(`${API_BASE_URL}/submissions/submit/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ challenge_id: id, answers }),
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch {
+    // silent
+  }
+  return { success: true };
+}
+

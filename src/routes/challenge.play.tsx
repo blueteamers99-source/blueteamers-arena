@@ -29,6 +29,9 @@ import {
   getActive,
   getProgress,
   setStatus,
+  fetchChallengeDetailApi,
+  saveProgressApi,
+  submitChallengeApi,
   type Challenge,
 } from "@/lib/mock-challenges";
 import evidenceEmail from "@/assets/evidence-email.png";
@@ -94,13 +97,23 @@ function PlayPage() {
 
   useEffect(() => {
     const activeId = getActive();
-    const c = CHALLENGES.find((x) => x.id === activeId) ?? CHALLENGES[0];
-    setChallenge(c);
+    const fallback = CHALLENGES.find((x) => x.id === activeId) ?? CHALLENGES[0];
+    setChallenge(fallback);
     setEv(getSelectedEvent());
-    setRemaining(c.duration * 60);
-    if (c.evidence?.length) setActiveEvidence(c.evidence[0].id);
-    if (activeId && getProgress()[activeId] !== "completed") {
-      setStatus(activeId, "in_progress");
+    setRemaining(fallback.duration * 60);
+    if (fallback.evidence?.length) setActiveEvidence(fallback.evidence[0].id);
+
+    if (activeId) {
+      fetchChallengeDetailApi(activeId).then((ch) => {
+        if (ch) {
+          setChallenge(ch);
+          setRemaining(ch.duration * 60);
+          if (ch.evidence?.length) setActiveEvidence(ch.evidence[0].id);
+        }
+      });
+      if (getProgress()[activeId] !== "completed") {
+        setStatus(activeId, "in_progress");
+      }
     }
   }, []);
 
@@ -127,8 +140,9 @@ function PlayPage() {
     ? EVIDENCE_URLS[currentEvidence.image] ?? currentEvidence.image
     : "";
 
-  const submit = () => {
+  const submit = async () => {
     setStatus(challenge.id, "completed");
+    await submitChallengeApi(challenge.id, answers);
     const progress = getProgress();
     progress[challenge.id] = "completed";
     if (completedCount(progress) === CHALLENGES.length) {
@@ -144,8 +158,9 @@ function PlayPage() {
     }
   };
 
-  const saveProgress = () => {
+  const saveProgress = async () => {
     setSaved(true);
+    await saveProgressApi(challenge.id, answers);
     setTimeout(() => setSaved(false), 1500);
   };
 
