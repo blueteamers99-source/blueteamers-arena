@@ -69,7 +69,7 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
 
   const startChallenge = (c: Challenge) => {
     startChallengeApi(c.id);
-    navigate({ to: "/challenge/play" });
+    navigate({ to: "/challenge/play", search: { challengeId: c.id } });
   };
 
   return (

@@ -3,7 +3,12 @@ from .base import *
 DEBUG = env.bool("DEBUG", default=False)
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["*"])
-CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=["https://*.railway.app", "https://*.up.railway.app"])
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[
+    "https://*.vercel.app",
+    "https://*.onrender.com",
+    "https://*.railway.app",
+    "https://*.up.railway.app",
+])
 
 # Database Configuration (supports DATABASE_URL on Railway/Heroku/Render)
 if env.str("DATABASE_URL", default=""):
