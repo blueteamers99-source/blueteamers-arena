@@ -268,21 +268,25 @@ export async function fetchChallengesApi(): Promise<Challenge[]> {
     const json = await res.json();
     const list = json.results || json.data || json;
     if (Array.isArray(list) && list.length > 0) {
-      return list.map((item: any) => ({
-        id: item.id || item.slug,
-        number: item.number || item.challenge_number || 1,
-        name: item.name,
-        description: item.description,
-        difficulty: item.difficulty,
-        duration: item.duration || item.duration_minutes || 20,
-        points: item.points || 100,
-        skills: item.skills || [],
-        objectives: item.objectives || [],
-        brief: item.brief || item.description,
-        resources: item.resources || [],
-        evidence: item.evidence || [],
-        questions: item.questions || [],
-      }));
+      return list.map((item: any) => {
+        const itemSlug = item.slug || item.id;
+        const fb = CHALLENGES.find((c) => c.id === itemSlug || c.number === item.challenge_number) || CHALLENGES[0];
+        return {
+          id: itemSlug || fb.id,
+          number: item.number || item.challenge_number || fb.number,
+          name: item.name || fb.name,
+          description: item.description || fb.description,
+          difficulty: item.difficulty || fb.difficulty,
+          duration: item.duration || item.duration_minutes || fb.duration,
+          points: item.points || fb.points,
+          skills: item.skills && item.skills.length > 0 ? item.skills : fb.skills,
+          objectives: item.objectives && item.objectives.length > 0 ? item.objectives : fb.objectives,
+          brief: item.brief || fb.brief || item.description,
+          resources: item.resources && item.resources.length > 0 ? item.resources : fb.resources,
+          evidence: item.evidence && item.evidence.length > 0 ? item.evidence : fb.evidence,
+          questions: item.questions && item.questions.length > 0 ? item.questions : fb.questions,
+        };
+      });
     }
   } catch {
     // fallback
@@ -297,20 +301,22 @@ export async function fetchChallengeDetailApi(id: string): Promise<Challenge | n
     const json = await res.json();
     const item = json.challenge || json.data || json;
     if (item && item.name) {
+      const itemSlug = item.slug || item.id || id;
+      const fb = CHALLENGES.find((c) => c.id === itemSlug || c.id === id) || CHALLENGES[0];
       return {
-        id: item.id || item.slug || id,
-        number: item.number || item.challenge_number || 1,
-        name: item.name,
-        description: item.description,
-        difficulty: item.difficulty,
-        duration: item.duration || item.duration_minutes || 20,
-        points: item.points || 100,
-        skills: item.skills || [],
-        objectives: item.objectives || [],
-        brief: item.brief || item.description,
-        resources: item.resources || [],
-        evidence: item.evidence || [],
-        questions: item.questions || [],
+        id: itemSlug,
+        number: item.number || item.challenge_number || fb.number,
+        name: item.name || fb.name,
+        description: item.description || fb.description,
+        difficulty: item.difficulty || fb.difficulty,
+        duration: item.duration || item.duration_minutes || fb.duration,
+        points: item.points || fb.points,
+        skills: item.skills && item.skills.length > 0 ? item.skills : fb.skills,
+        objectives: item.objectives && item.objectives.length > 0 ? item.objectives : fb.objectives,
+        brief: item.brief || fb.brief || item.description,
+        resources: item.resources && item.resources.length > 0 ? item.resources : fb.resources,
+        evidence: item.evidence && item.evidence.length > 0 ? item.evidence : fb.evidence,
+        questions: item.questions && item.questions.length > 0 ? item.questions : fb.questions,
       };
     }
   } catch {
