@@ -145,10 +145,8 @@ function Dashboard() {
   const [leaderboardFilter, setLeaderboardFilter] = useState<LeaderboardFilter>("All");
 
   useEffect(() => {
-    // Guard: redirect to /arena if user hasn't entered an event code
-    const eventCode =
-      (typeof localStorage !== "undefined" && (localStorage.getItem("arena.selectedEventCode") || localStorage.getItem("selected_event_data"))) ||
-      (typeof sessionStorage !== "undefined" && sessionStorage.getItem("arena.selectedEventCode"));
+    // Guard: redirect to /arena if user hasn't entered an event code in this session
+    const eventCode = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("arena.selectedEventCode") : null;
     if (!eventCode) {
       navigate({ to: "/arena" });
       return;

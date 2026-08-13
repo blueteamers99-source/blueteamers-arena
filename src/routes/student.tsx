@@ -24,7 +24,14 @@ function Student() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => setAccentKey(getSelectedEvent().accent), []);
+  useEffect(() => {
+    const eventCode = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("arena.selectedEventCode") : null;
+    if (!eventCode) {
+      navigate({ to: "/arena" });
+      return;
+    }
+    setAccentKey(getSelectedEvent().accent);
+  }, []);
   const accent = ACCENT_CLASSES[accentKey];
 
   const handleSubmit = async (e: React.FormEvent) => {

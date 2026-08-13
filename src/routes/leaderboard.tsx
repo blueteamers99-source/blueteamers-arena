@@ -68,9 +68,7 @@ function ArenaCommandCenter() {
   };
 
   useEffect(() => {
-    const eventCode =
-      (typeof localStorage !== "undefined" && (localStorage.getItem("arena.selectedEventCode") || localStorage.getItem("selected_event_data"))) ||
-      (typeof sessionStorage !== "undefined" && sessionStorage.getItem("arena.selectedEventCode"));
+    const eventCode = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("arena.selectedEventCode") : null;
     if (!eventCode) {
       navigate({ to: "/arena" });
       return;
