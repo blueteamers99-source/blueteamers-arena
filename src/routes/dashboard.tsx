@@ -334,7 +334,7 @@ function Dashboard() {
       {/* Main Content Area (Dynamic Margin based on sidebar state) */}
       <main className={`relative z-10 transition-all duration-300 ${collapsed ? "pl-16" : "pl-64"}`}>
         {/* Top Header Navigation Bar */}
-        <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-md px-6 py-4 flex items-center justify-between">
+        <header className="sticky top-0 z-30 border-b-2 border-border/80 bg-background/80 backdrop-blur-md px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setCollapsed(!collapsed)}

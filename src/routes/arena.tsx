@@ -18,7 +18,7 @@ export const Route = createFileRoute("/arena")({
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-screen bg-background">
-      <header className="border-b border-border/60">
+      <header className="border-b-2 border-border/80">
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
           <Link to="/" className="flex items-center gap-3">
             <div className="grid h-10 w-10 place-items-center rounded-lg border border-border bg-card">

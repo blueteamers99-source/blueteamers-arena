@@ -16,7 +16,7 @@ export function Logo() {
 
 export function Navbar() {
   return (
-    <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b-2 border-border/80 bg-background/80 backdrop-blur-md">
       <nav className="mx-auto flex max-w-[1400px] items-center justify-between gap-6 px-6 py-4">
         <Link to="/" className="transition-opacity hover:opacity-80">
           <Logo />
