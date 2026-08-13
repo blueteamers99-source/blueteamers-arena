@@ -45,111 +45,11 @@ def seed_real_data():
     )
     print(f"[+] Event: {event.workshop_name} (Code: {event.event_code})")
 
-    # 3. Real Challenges across 5 Cyber Domains
-    challenges_data = [
-        {
-            "title": "Operation PhishNet — Spear Phishing Attack Investigation",
-            "category": "Phishing",
-            "difficulty": "Easy",
-            "points": 100,
-            "challenge_number": 1,
-            "duration": 20,
-            "description": "A finance employee reported a suspicious email requesting an urgent wire transfer. Analyze headers, SPF/DKIM, and domain spoofing.",
-            "questions": [
-                {"text": "What is the spoofed sender domain in the email header?", "answer": "payroll-secure.com", "points": 20},
-                {"text": "What is the IP address of the sending mail transfer agent?", "answer": "192.168.1.105", "points": 20},
-                {"text": "What is the result of the SPF authentication check?", "answer": "SOFTFAIL", "points": 20},
-                {"text": "What malicious attachment filename was included?", "answer": "Urgent_Invoice.pdf.exe", "points": 20},
-                {"text": "What is the MITRE ATT&CK technique ID for Spearphishing Attachment?", "answer": "T1566.001", "points": 20},
-            ]
-        },
-        {
-            "title": "Alert Storm — Windows Event & Sysmon Log Correlation",
-            "category": "SIEM",
-            "difficulty": "Medium",
-            "points": 100,
-            "challenge_number": 2,
-            "duration": 25,
-            "description": "Correlate Windows Sysmon log events to trace lateral movement and malicious process creation.",
-            "questions": [
-                {"text": "Which Event ID indicates process creation in Sysmon?", "answer": "1", "points": 25},
-                {"text": "What parent process spawned powershell.exe?", "answer": "cmd.exe", "points": 25},
-                {"text": "What destination IP address did the malware attempt to connect to?", "answer": "185.220.101.5", "points": 25},
-                {"text": "What user account was compromised during process execution?", "answer": "FINANCE\\admin_user", "points": 25},
-            ]
-        },
-        {
-            "title": "AI Security Audit — Prompt Injection & Model Jailbreak",
-            "category": "AI",
-            "difficulty": "Hard",
-            "points": 100,
-            "challenge_number": 3,
-            "duration": 30,
-            "description": "Analyze LLM chat logs to identify indirect prompt injection payloads that bypass safety filters.",
-            "questions": [
-                {"text": "What delimiter technique was used to override system instructions?", "answer": "### SYSTEM OVERRIDE ###", "points": 30},
-                {"text": "What sensitive API key variable was leaked in the response?", "answer": "OPENAI_API_SECRET_KEY", "points": 35},
-                {"text": "What OWASP Top 10 for LLM vulnerability category matches this exploit?", "answer": "LLM01", "points": 35},
-            ]
-        },
-        {
-            "title": "Ransomware Attack & Incident Response Containment",
-            "category": "Incident Response",
-            "difficulty": "Hard",
-            "points": 100,
-            "challenge_number": 4,
-            "duration": 35,
-            "description": "Investigate network traffic capture (.pcap) and ransomware shadow copy deletion execution.",
-            "questions": [
-                {"text": "What command was executed to delete volume shadow copies?", "answer": "vssadmin.exe delete shadows /all /quiet", "points": 50},
-                {"text": "What file extension was appended to encrypted files?", "answer": ".locked_soc", "points": 50},
-            ]
-        },
-        {
-            "title": "Digital Forensics — USB & Browser Artifact Tracing",
-            "category": "Digital Forensics",
-            "difficulty": "Medium",
-            "points": 100,
-            "challenge_number": 5,
-            "duration": 30,
-            "description": "Examine USB registry artifacts and Chrome browser history sqlite databases to identify exfiltrated files.",
-            "questions": [
-                {"text": "What serial number identifies the connected rogue USB flash drive?", "answer": "07018512938491", "points": 50},
-                {"text": "What external file-sharing URL was visited by the insider?", "answer": "https://temp-fileshare.net/upload/confidential", "points": 50},
-            ]
-        }
-    ]
+    # 3. Real Challenges across 5 Cyber Domains (The 5 Lead's Challenges)
+    from django.core.management import call_command
+    call_command("seed_existing_challenges")
+    challenges = list(Challenge.objects.order_by("challenge_number"))
 
-    challenges = []
-    for ch_data in challenges_data:
-        ch, _ = Challenge.objects.get_or_create(
-            challenge_number=ch_data["challenge_number"],
-            defaults={
-                "name": ch_data["title"],
-                "slug": f"ch-{ch_data['challenge_number']}-{ch_data['category'].lower()}",
-                "difficulty": ch_data["difficulty"],
-                "points": ch_data["points"],
-                "duration_minutes": ch_data["duration"],
-                "description": ch_data["description"],
-                "brief": ch_data["description"],
-            }
-        )
-        challenges.append(ch)
-
-        # Seed Questions for each challenge
-        for idx, q_info in enumerate(ch_data["questions"]):
-            Question.objects.get_or_create(
-                category=ch_data["category"],
-                question_text=q_info["text"],
-                defaults={
-                    "difficulty": ch_data["difficulty"],
-                    "correct_answer": q_info["answer"],
-                    "default_points": q_info["points"],
-                    "status": "Published",
-                }
-            )
-
-    print(f"[+] Created {len(challenges)} Domain Challenges and associated Questions in PostgreSQL.")
 
     # 4. Real Students & Participants Data
     students_list = [

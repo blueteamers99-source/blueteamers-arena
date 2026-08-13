@@ -6,6 +6,9 @@ from apps.participants.models.participant_progress import ParticipantProgress
 
 
 class PublicEvidenceSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(source="artifact_key")
+    image = serializers.CharField(source="image_url")
+
     class Meta:
         model = Evidence
         fields = [
@@ -15,12 +18,16 @@ class PublicEvidenceSerializer(serializers.ModelSerializer):
             "filename",
             "file_format",
             "content_text",
+            "image",
             "image_url",
             "file_size_display",
         ]
 
 
 class StudentChallengeListSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(source="slug")
+    number = serializers.IntegerField(source="challenge_number")
+    duration = serializers.IntegerField(source="duration_minutes")
     completed = serializers.SerializerMethodField()
     unlocked = serializers.SerializerMethodField()
     category = serializers.SerializerMethodField()
@@ -29,6 +36,7 @@ class StudentChallengeListSerializer(serializers.ModelSerializer):
         model = Challenge
         fields = [
             "id",
+            "number",
             "challenge_number",
             "slug",
             "name",
@@ -36,6 +44,7 @@ class StudentChallengeListSerializer(serializers.ModelSerializer):
             "difficulty",
             "category",
             "points",
+            "duration",
             "duration_minutes",
             "skills",
             "completed",
@@ -59,7 +68,6 @@ class StudentChallengeListSerializer(serializers.ModelSerializer):
         ).exists()
 
     def get_unlocked(self, obj) -> bool:
-        # Challenge 1 is unlocked by default; others unlocked if participant is registered
         request = self.context.get("request")
         if not request or not getattr(request, "participant", None):
             return obj.challenge_number == 1
@@ -67,6 +75,9 @@ class StudentChallengeListSerializer(serializers.ModelSerializer):
 
 
 class StudentChallengeDetailSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(source="slug")
+    number = serializers.IntegerField(source="challenge_number")
+    duration = serializers.IntegerField(source="duration_minutes")
     evidence = PublicEvidenceSerializer(source="evidence_files", many=True, read_only=True)
     questions = serializers.SerializerMethodField()
     resources = serializers.SerializerMethodField()
@@ -77,6 +88,7 @@ class StudentChallengeDetailSerializer(serializers.ModelSerializer):
         model = Challenge
         fields = [
             "id",
+            "number",
             "challenge_number",
             "slug",
             "name",
@@ -84,6 +96,7 @@ class StudentChallengeDetailSerializer(serializers.ModelSerializer):
             "brief",
             "difficulty",
             "category",
+            "duration",
             "duration_minutes",
             "points",
             "skills",
@@ -112,8 +125,18 @@ class StudentChallengeDetailSerializer(serializers.ModelSerializer):
         return res
 
     def get_questions(self, obj) -> list:
-        questions = [cq.question for cq in obj.challenge_questions.all().order_by("position")]
-        return PublicQuestionSerializer(questions, many=True).data
+        res = []
+        for pos, cq in enumerate(obj.challenge_questions.all().order_by("position"), start=1):
+            q = cq.question
+            res.append({
+                "id": f"q{pos}",
+                "db_id": str(q.id),
+                "prompt": q.question_text,
+                "kind": q.kind,
+                "options": q.options_json if q.kind == "mcq" else [],
+                "points": q.default_points,
+            })
+        return res
 
     def get_progress(self, obj) -> dict:
         request = self.context.get("request")

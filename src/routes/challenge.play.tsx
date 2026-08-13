@@ -29,6 +29,9 @@ import {
   getActive,
   getProgress,
   setStatus,
+  fetchChallengeDetailApi,
+  saveProgressApi,
+  submitChallengeApi,
   type Challenge,
 } from "@/lib/mock-challenges";
 import evidenceEmail from "@/assets/evidence-email.png";
@@ -60,6 +63,9 @@ const EVIDENCE_URLS: Record<string, string> = {
 
 
 export const Route = createFileRoute("/challenge/play")({
+  validateSearch: (search: Record<string, unknown>): { challengeId?: string } => ({
+    challengeId: (search.challengeId as string) || undefined,
+  }),
   component: PlayPage,
   head: () => ({
     meta: [
@@ -80,6 +86,7 @@ function formatTime(sec: number) {
 
 function PlayPage() {
   const navigate = useNavigate();
+  const searchParams = Route.useSearch();
   const [ev, setEv] = useState<MockEvent | null>(null);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -93,16 +100,25 @@ function PlayPage() {
 
 
   useEffect(() => {
-    const activeId = getActive();
-    const c = CHALLENGES.find((x) => x.id === activeId) ?? CHALLENGES[0];
-    setChallenge(c);
+    const activeId = searchParams.challengeId || getActive() || "phishnet";
+    const fallback = CHALLENGES.find((x) => x.id === activeId) ?? CHALLENGES[0];
+    setChallenge(fallback);
     setEv(getSelectedEvent());
-    setRemaining(c.duration * 60);
-    if (c.evidence?.length) setActiveEvidence(c.evidence[0].id);
+    setRemaining(fallback.duration * 60);
+    if (fallback.evidence?.length) setActiveEvidence(fallback.evidence[0].id);
+
+    fetchChallengeDetailApi(activeId).then((ch) => {
+      if (ch) {
+        setChallenge(ch);
+        setRemaining(ch.duration * 60);
+        if (ch.evidence?.length) setActiveEvidence(ch.evidence[0].id);
+      }
+    });
+
     if (activeId && getProgress()[activeId] !== "completed") {
       setStatus(activeId, "in_progress");
     }
-  }, []);
+  }, [searchParams.challengeId]);
 
 
   useEffect(() => {
@@ -112,14 +128,31 @@ function PlayPage() {
   }, [challenge]);
 
   const answered = useMemo(
-    () => (challenge ? challenge.questions.filter((q) => answers[q.id]?.trim()).length : 0),
+    () => (challenge && challenge.questions ? challenge.questions.filter((q) => answers[q.id]?.trim()).length : 0),
     [answers, challenge],
   );
 
-  if (!ev || !challenge) return null;
-  const accent = ACCENT_CLASSES[ev.accent];
-  const q = challenge.questions[current];
-  const progressPct = Math.round((answered / challenge.questions.length) * 100);
+  if (!ev || !challenge) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="max-w-md text-center">
+          <h2 className="text-xl font-semibold">Loading Challenge...</h2>
+          <p className="mt-2 text-sm text-muted-foreground">Fetching challenge details from database.</p>
+          <button
+            onClick={() => navigate({ to: "/challenges" })}
+            className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+          >
+            Back to Challenges
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  const accent = (ev && ev.accent && ACCENT_CLASSES[ev.accent]) ? ACCENT_CLASSES[ev.accent] : ACCENT_CLASSES.blue;
+  const questions = challenge.questions ?? [];
+  const q = questions.length > current ? questions[current] : null;
+  const progressPct = questions.length > 0 ? Math.round((answered / questions.length) * 100) : 0;
   const evidence = challenge.evidence ?? [];
   const currentEvidence =
     evidence.find((e) => e.id === activeEvidence) ?? evidence[0];
@@ -127,8 +160,9 @@ function PlayPage() {
     ? EVIDENCE_URLS[currentEvidence.image] ?? currentEvidence.image
     : "";
 
-  const submit = () => {
+  const submit = async () => {
     setStatus(challenge.id, "completed");
+    await submitChallengeApi(challenge.id, answers);
     const progress = getProgress();
     progress[challenge.id] = "completed";
     if (completedCount(progress) === CHALLENGES.length) {
@@ -144,8 +178,9 @@ function PlayPage() {
     }
   };
 
-  const saveProgress = () => {
+  const saveProgress = async () => {
     setSaved(true);
+    await saveProgressApi(challenge.id, answers);
     setTimeout(() => setSaved(false), 1500);
   };
 
@@ -365,7 +400,7 @@ function PlayPage() {
                 Questions
               </div>
               <div className="text-xs text-muted-foreground">
-                {answered} / {challenge.questions.length} answered
+                {answered} / {questions.length} answered
               </div>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface)]">
@@ -375,46 +410,52 @@ function PlayPage() {
               />
             </div>
 
-            <div className="mt-6">
-              <div className="text-xs text-muted-foreground">
-                Question {current + 1} of {challenge.questions.length}
-              </div>
-              <h3 className="mt-1 text-base font-semibold">{q.prompt}</h3>
-
-              {q.kind === "text" ? (
-                <textarea
-                  value={answers[q.id] ?? ""}
-                  onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
-                  placeholder="Type your answer..."
-                  rows={4}
-                  className="mt-3 w-full resize-none rounded-md border border-border bg-[var(--surface)] px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-blue-500/60"
-                />
-              ) : (
-                <div className="mt-3 space-y-2">
-                  {q.options!.map((opt) => {
-                    const active = answers[q.id] === opt;
-                    return (
-                      <label
-                        key={opt}
-                        className={`flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm transition-colors ${active
-                            ? `${accent.border} ${accent.bgSoft}`
-                            : "border-border bg-[var(--surface)] hover:border-border/80"
-                          }`}
-                      >
-                        <input
-                          type="radio"
-                          name={q.id}
-                          checked={active}
-                          onChange={() => setAnswers((a) => ({ ...a, [q.id]: opt }))}
-                          className="accent-blue-500"
-                        />
-                        {opt}
-                      </label>
-                    );
-                  })}
+            {q ? (
+              <div className="mt-6">
+                <div className="text-xs text-muted-foreground">
+                  Question {current + 1} of {questions.length}
                 </div>
-              )}
-            </div>
+                <h3 className="mt-1 text-base font-semibold">{q.prompt}</h3>
+
+                {q.kind === "text" ? (
+                  <textarea
+                    value={answers[q.id] ?? ""}
+                    onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+                    placeholder="Type your answer..."
+                    rows={4}
+                    className="mt-3 w-full resize-none rounded-md border border-border bg-[var(--surface)] px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-blue-500/60"
+                  />
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {(q.options || []).map((opt) => {
+                      const active = answers[q.id] === opt;
+                      return (
+                        <label
+                          key={opt}
+                          className={`flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm transition-colors ${active
+                              ? `${accent.border} ${accent.bgSoft}`
+                              : "border-border bg-[var(--surface)] hover:border-border/80"
+                            }`}
+                        >
+                          <input
+                            type="radio"
+                            name={q.id}
+                            checked={active}
+                            onChange={() => setAnswers((a) => ({ ...a, [q.id]: opt }))}
+                            className="accent-blue-500"
+                          />
+                          {opt}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-6 rounded-md border border-dashed border-border bg-[var(--surface)] p-6 text-center text-sm text-muted-foreground">
+                No active questions found for this challenge position.
+              </div>
+            )}
           </Panel>
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
@@ -431,9 +472,9 @@ function PlayPage() {
             >
               <Save className="h-4 w-4" /> {saved ? "Saved" : "Save Progress"}
             </button>
-            {current < challenge.questions.length - 1 ? (
+            {current < questions.length - 1 ? (
               <button
-                onClick={() => setCurrent((c) => Math.min(challenge.questions.length - 1, c + 1))}
+                onClick={() => setCurrent((c) => Math.min(questions.length - 1, c + 1))}
                 className={`inline-flex items-center gap-2 rounded-md ${accent.bg} ${accent.hover} px-4 py-2 text-sm font-semibold text-white`}
               >
                 Next <ArrowRight className="h-4 w-4" />
@@ -470,7 +511,7 @@ function PlayPage() {
             <div className="flex items-center gap-2">
               <Target className={`h-4 w-4 ${accent.text}`} />
               <span className="text-2xl font-bold">
-                {answered}/{challenge.questions.length}
+                {answered}/{questions.length}
               </span>
             </div>
             <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface)]">
@@ -485,7 +526,7 @@ function PlayPage() {
               <Row k="Difficulty" v={challenge.difficulty} />
               <Row k="Duration" v={`${challenge.duration} min`} />
               <Row k="Max Points" v={String(challenge.points)} />
-              <Row k="Questions" v={String(challenge.questions.length)} />
+              <Row k="Questions" v={String(questions.length)} />
             </dl>
           </Panel>
         </aside>

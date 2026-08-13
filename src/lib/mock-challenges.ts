@@ -258,3 +258,124 @@ export const DIFFICULTY_BADGE: Record<Difficulty, string> = {
   Medium: "bg-amber-500/10 text-amber-400 border-amber-500/30",
   Hard: "bg-rose-500/10 text-rose-400 border-rose-500/30",
 };
+
+import { API_BASE_URL } from "./config";
+
+export async function fetchChallengesApi(): Promise<Challenge[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/challenges/`);
+    if (!res.ok) return CHALLENGES;
+    const json = await res.json();
+    const list = json.results || json.data || json;
+    if (Array.isArray(list) && list.length > 0) {
+      return list.map((item: any) => {
+        const itemSlug = item.slug || item.id;
+        const fb = CHALLENGES.find((c) => c.id === itemSlug || c.number === item.challenge_number) || CHALLENGES[0];
+        return {
+          id: itemSlug || fb.id,
+          number: item.number || item.challenge_number || fb.number,
+          name: item.name || fb.name,
+          description: item.description || fb.description,
+          difficulty: item.difficulty || fb.difficulty,
+          duration: item.duration || item.duration_minutes || fb.duration,
+          points: item.points || fb.points,
+          skills: item.skills && item.skills.length > 0 ? item.skills : fb.skills,
+          objectives: item.objectives && item.objectives.length > 0 ? item.objectives : fb.objectives,
+          brief: item.brief || fb.brief || item.description,
+          resources: item.resources && item.resources.length > 0 ? item.resources : fb.resources,
+          evidence: item.evidence && item.evidence.length > 0 ? item.evidence : fb.evidence,
+          questions: item.questions && item.questions.length > 0 ? item.questions : fb.questions,
+        };
+      });
+    }
+  } catch {
+    // fallback
+  }
+  return CHALLENGES;
+}
+
+export async function fetchChallengeDetailApi(id: string): Promise<Challenge | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/challenges/${id}/`);
+    if (!res.ok) return CHALLENGES.find((c) => c.id === id) || null;
+    const json = await res.json();
+    const item = json.challenge || json.data || json;
+    if (item && item.name) {
+      const itemSlug = item.slug || item.id || id;
+      const fb = CHALLENGES.find((c) => c.id === itemSlug || c.id === id) || CHALLENGES[0];
+      return {
+        id: itemSlug,
+        number: item.number || item.challenge_number || fb.number,
+        name: item.name || fb.name,
+        description: item.description || fb.description,
+        difficulty: item.difficulty || fb.difficulty,
+        duration: item.duration || item.duration_minutes || fb.duration,
+        points: item.points || fb.points,
+        skills: item.skills && item.skills.length > 0 ? item.skills : fb.skills,
+        objectives: item.objectives && item.objectives.length > 0 ? item.objectives : fb.objectives,
+        brief: item.brief || fb.brief || item.description,
+        resources: item.resources && item.resources.length > 0 ? item.resources : fb.resources,
+        evidence: item.evidence && item.evidence.length > 0 ? item.evidence : fb.evidence,
+        questions: item.questions && item.questions.length > 0 ? item.questions : fb.questions,
+      };
+    }
+  } catch {
+    // fallback
+  }
+  return CHALLENGES.find((c) => c.id === id) || null;
+}
+
+export async function startChallengeApi(id: string): Promise<void> {
+  setActive(id);
+  setStatus(id, "in_progress");
+  try {
+    const token = localStorage.getItem("blueteamers_participant_token") || sessionStorage.getItem("blueteamers_participant_token");
+    await fetch(`${API_BASE_URL}/challenges/${id}/start/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  } catch {
+    // silent
+  }
+}
+
+export async function saveProgressApi(id: string, answers: Record<string, string>): Promise<void> {
+  try {
+    const token = localStorage.getItem("blueteamers_participant_token") || sessionStorage.getItem("blueteamers_participant_token");
+    await fetch(`${API_BASE_URL}/challenges/${id}/save-progress/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ answers }),
+    });
+  } catch {
+    // silent
+  }
+}
+
+export async function submitChallengeApi(id: string, answers: Record<string, string>): Promise<any> {
+  setStatus(id, "completed");
+  try {
+    const token = localStorage.getItem("blueteamers_participant_token") || sessionStorage.getItem("blueteamers_participant_token");
+    const res = await fetch(`${API_BASE_URL}/submissions/submit/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ challenge_id: id, answers }),
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch {
+    // silent
+  }
+  return { success: true };
+}
+

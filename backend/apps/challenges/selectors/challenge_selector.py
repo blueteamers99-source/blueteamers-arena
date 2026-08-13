@@ -20,6 +20,11 @@ class ChallengeSelector:
         challenge = Challenge.objects.filter(slug=identifier).first()
         if challenge:
             return challenge
+        # Try challenge_number lookup if numeric string
+        if str(identifier).isdigit():
+            challenge = Challenge.objects.filter(challenge_number=int(identifier)).first()
+            if challenge:
+                return challenge
         # Fallback to PK lookup if valid UUID string
         try:
             import uuid

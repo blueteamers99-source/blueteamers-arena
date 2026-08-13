@@ -25,6 +25,8 @@ import {
   computeScore,
   getProgress,
   setActive,
+  fetchChallengesApi,
+  startChallengeApi,
   type Challenge,
   type ProgressMap,
 } from "@/lib/mock-challenges";
@@ -33,6 +35,7 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
   const navigate = useNavigate();
   const [ev, setEv] = useState<MockEvent | null>(null);
   const [progress, setProgress] = useState<ProgressMap>({});
+  const [challenges, setChallenges] = useState<Challenge[]>(CHALLENGES);
   const [selected, setSelected] = useState<Challenge | null>(null);
   const [search, setSearch] = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("All");
@@ -40,13 +43,16 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
   useEffect(() => {
     setEv(getSelectedEvent());
     setProgress(getProgress());
+    fetchChallengesApi().then((list) => {
+      if (list && list.length > 0) setChallenges(list);
+    });
   }, []);
 
   const score = useMemo(() => computeScore(progress), [progress]);
   const done = useMemo(() => completedCount(progress), [progress]);
 
   const filteredChallenges = useMemo(() => {
-    return CHALLENGES.filter((c) => {
+    return challenges.filter((c) => {
       const matchSearch =
         !search ||
         c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -56,14 +62,14 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
         c.difficulty.toLowerCase() === filterDifficulty.toLowerCase();
       return matchSearch && matchDiff;
     });
-  }, [search, filterDifficulty]);
+  }, [challenges, search, filterDifficulty]);
 
   if (!ev) return null;
   const accent = ACCENT_CLASSES[ev.accent];
 
   const startChallenge = (c: Challenge) => {
-    setActive(c.id);
-    navigate({ to: "/challenge/play" });
+    startChallengeApi(c.id);
+    navigate({ to: "/challenge/play", search: { challengeId: c.id } });
   };
 
   return (
