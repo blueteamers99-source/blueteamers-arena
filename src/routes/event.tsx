@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   Calendar,
@@ -19,7 +19,6 @@ import {
   UserCheck,
   Sparkles,
   ArrowRight,
-  ArrowLeft,
   Monitor,
   Copy,
   Check,
@@ -82,14 +81,7 @@ export default function EventDetailsPage() {
       <div className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">
         {/* Top Navigation & Action Bar */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-4">
-          <Link
-            to="/dashboard"
-            search={{ tab: "Events" }}
-            className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-card px-4 py-2 text-xs font-bold text-foreground hover:bg-accent transition-colors shadow-sm"
-          >
-            <ArrowLeft className="h-4 w-4 text-primary" />
-            Back to Events Page
-          </Link>
+          <div />
 
           <div className="flex items-center gap-3">
             <button
