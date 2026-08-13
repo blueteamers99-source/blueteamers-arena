@@ -29,7 +29,6 @@ import {
   getActive,
   getProgress,
   setStatus,
-  fetchChallengeDetailApi,
   saveProgressApi,
   submitChallengeApi,
   type Challenge,
@@ -101,19 +100,11 @@ function PlayPage() {
 
   useEffect(() => {
     const activeId = searchParams.challengeId || getActive() || "phishnet";
-    const fallback = CHALLENGES.find((x) => x.id === activeId) ?? CHALLENGES[0];
-    setChallenge(fallback);
+    const challenge = CHALLENGES.find((x) => x.id === activeId) ?? CHALLENGES[0];
+    setChallenge(challenge);
     setEv(getSelectedEvent());
-    setRemaining(fallback.duration * 60);
-    if (fallback.evidence?.length) setActiveEvidence(fallback.evidence[0].id);
-
-    fetchChallengeDetailApi(activeId).then((ch) => {
-      if (ch) {
-        setChallenge(ch);
-        setRemaining(ch.duration * 60);
-        if (ch.evidence?.length) setActiveEvidence(ch.evidence[0].id);
-      }
-    });
+    setRemaining(challenge.duration * 60);
+    if (challenge.evidence?.length) setActiveEvidence(challenge.evidence[0].id);
 
     if (activeId && getProgress()[activeId] !== "completed") {
       setStatus(activeId, "in_progress");
