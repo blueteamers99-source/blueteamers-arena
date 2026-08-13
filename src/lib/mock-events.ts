@@ -179,6 +179,16 @@ export function saveSelectedEvent(code: string) {
   }
 }
 
+// Clear session validation whenever the student leaves the page (navigates away, refreshes, closes tab/window)
+if (typeof window !== "undefined") {
+  const clearSession = () => {
+    sessionStorage.removeItem(KEY);
+    sessionStorage.removeItem("is_code_verified");
+  };
+  window.addEventListener("pagehide", clearSession);
+  window.addEventListener("beforeunload", clearSession);
+}
+
 export function getSelectedEvent(): MockEvent {
   if (typeof window === "undefined") return EVENTS["VRSEC-4851"];
   const rawData = localStorage.getItem("selected_event_data");
