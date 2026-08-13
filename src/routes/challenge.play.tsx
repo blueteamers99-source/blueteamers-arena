@@ -99,6 +99,14 @@ function PlayPage() {
 
 
   useEffect(() => {
+    const eventCode =
+      (typeof localStorage !== "undefined" && (localStorage.getItem("arena.selectedEventCode") || localStorage.getItem("selected_event_data"))) ||
+      (typeof sessionStorage !== "undefined" && sessionStorage.getItem("arena.selectedEventCode"));
+    if (!eventCode) {
+      navigate({ to: "/arena" });
+      return;
+    }
+
     const activeId = searchParams.challengeId || getActive() || "phishnet";
     const challenge = CHALLENGES.find((x) => x.id === activeId) ?? CHALLENGES[0];
     setChallenge(challenge);

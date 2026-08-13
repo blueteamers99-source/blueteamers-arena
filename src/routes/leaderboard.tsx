@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
 import {
   Trophy,
@@ -37,6 +37,7 @@ export const Route = createFileRoute("/leaderboard")({
 });
 
 function ArenaCommandCenter() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [eventFilter, setEventFilter] = useState("All");
   const [collegeFilter, setCollegeFilter] = useState("All");
@@ -67,6 +68,13 @@ function ArenaCommandCenter() {
   };
 
   useEffect(() => {
+    const eventCode =
+      (typeof localStorage !== "undefined" && (localStorage.getItem("arena.selectedEventCode") || localStorage.getItem("selected_event_data"))) ||
+      (typeof sessionStorage !== "undefined" && sessionStorage.getItem("arena.selectedEventCode"));
+    if (!eventCode) {
+      navigate({ to: "/arena" });
+      return;
+    }
     fetchLeaderboardData();
     const interval = setInterval(fetchLeaderboardData, 4000); // 4-second live poll
     return () => clearInterval(interval);

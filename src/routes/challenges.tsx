@@ -47,6 +47,13 @@ function ChallengesPage() {
   const [selected, setSelected] = useState<Challenge | null>(null);
 
   useEffect(() => {
+    const eventCode =
+      (typeof localStorage !== "undefined" && (localStorage.getItem("arena.selectedEventCode") || localStorage.getItem("selected_event_data"))) ||
+      (typeof sessionStorage !== "undefined" && sessionStorage.getItem("arena.selectedEventCode"));
+    if (!eventCode) {
+      navigate({ to: "/arena" });
+      return;
+    }
     setEv(getSelectedEvent());
     setProgress(getProgress());
   }, []);

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import {
   CheckCircle2,
@@ -35,10 +35,19 @@ export const Route = createFileRoute("/competition-complete")({
 });
 
 function CompetitionComplete() {
+  const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [certData, setCertData] = useState<any>(null);
 
   useEffect(() => {
+    const eventCode =
+      (typeof localStorage !== "undefined" && (localStorage.getItem("arena.selectedEventCode") || localStorage.getItem("selected_event_data"))) ||
+      (typeof sessionStorage !== "undefined" && sessionStorage.getItem("arena.selectedEventCode"));
+    if (!eventCode) {
+      navigate({ to: "/arena" });
+      return;
+    }
+
     const token = typeof localStorage !== "undefined" ? localStorage.getItem("student_access_token") : null;
     const userEmail = typeof localStorage !== "undefined" ? localStorage.getItem("user_email") : null;
     const headers: Record<string, string> = { "Content-Type": "application/json" };
