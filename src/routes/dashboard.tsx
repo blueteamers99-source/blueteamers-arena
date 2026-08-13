@@ -23,9 +23,7 @@ import {
   PlayCircle,
   Crown,
   FileText,
-  Calendar,
 } from "lucide-react";
-import StuEvents from "./stuevents";
 import ChallengesPage from "@/components/ChallengesPage";
 import { API_BASE_URL } from "@/lib/config";
 import {
@@ -67,7 +65,6 @@ export const Route = createFileRoute("/dashboard")({
 
 const sidebarItems = [
   { id: "Dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "Events", label: "Events", icon: Calendar },
   { id: "Challenges", label: "Challenges", icon: Target },
   { id: "Leaderboard", label: "Leaderboard", icon: Trophy },
   { id: "Rules", label: "Rules", icon: BookOpen, isAction: true },
@@ -357,8 +354,7 @@ function Dashboard() {
           </div>
         </header>
 
-        {/* Tab: Events */}
-        {activeTab === "Events" && <StuEvents hideNav />}
+
 
         {/* Tab 1: Dashboard Overview */}
         {activeTab === "Dashboard" && (

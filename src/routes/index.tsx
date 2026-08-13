@@ -8,7 +8,7 @@ import {
   Instagram,
   Youtube,
 } from "lucide-react";
-import heroCyberImage from "@/assets/hero-cyber.jpg";
+import arenaPreviewImage from "@/assets/arena-preview.png";
 
 import { Navbar } from "@/components/Navbar";
 
@@ -95,11 +95,11 @@ function GhostButton({
 
 function AppPreview() {
   return (
-    <div className="relative mx-auto max-w-xl overflow-hidden rounded-2xl border border-border/80 bg-card p-2 shadow-2xl shadow-black/60 group">
+    <div className="relative mx-auto max-w-xl group">
       <img
-        src={heroCyberImage}
-        alt="Blueteamers Arena Cybersecurity Shield & Defender Operations"
-        className="max-h-[460px] w-full rounded-xl object-cover shadow-inner transition-transform duration-500 group-hover:scale-[1.02]"
+        src={arenaPreviewImage}
+        alt="Blueteamers Arena Question Preview"
+        className="w-full rounded-2xl drop-shadow-2xl transition-transform duration-500 group-hover:scale-[1.02]"
       />
     </div>
   );

@@ -1,5 +1,4 @@
 import { Link } from "@tanstack/react-router";
-import { LogIn } from "lucide-react";
 
 export function Logo() {
   return (
@@ -22,15 +21,6 @@ export function Navbar() {
         <Link to="/" className="transition-opacity hover:opacity-80">
           <Logo />
         </Link>
-        <div className="flex items-center gap-4">
-          <Link
-            to="/admin/login"
-            className="inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:bg-primary-hover hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-          >
-            <LogIn className="h-4 w-4" />
-            <span>Login</span>
-          </Link>
-        </div>
       </nav>
     </header>
   );

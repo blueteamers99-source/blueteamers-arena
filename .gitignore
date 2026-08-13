@@ -37,3 +37,7 @@ dist-ssr
 
 # Project workspace settings
 .workspace/
+
+# Python cache
+__pycache__/
+*.pyc
