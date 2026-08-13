@@ -24,8 +24,6 @@ import {
   completedCount,
   computeScore,
   getProgress,
-  setActive,
-  fetchChallengesApi,
   startChallengeApi,
   type Challenge,
   type ProgressMap,
@@ -35,7 +33,7 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
   const navigate = useNavigate();
   const [ev, setEv] = useState<MockEvent | null>(null);
   const [progress, setProgress] = useState<ProgressMap>({});
-  const [challenges, setChallenges] = useState<Challenge[]>(CHALLENGES);
+  const [challenges] = useState<Challenge[]>(CHALLENGES);
   const [selected, setSelected] = useState<Challenge | null>(null);
   const [search, setSearch] = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("All");
@@ -43,9 +41,6 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
   useEffect(() => {
     setEv(getSelectedEvent());
     setProgress(getProgress());
-    fetchChallengesApi().then((list) => {
-      if (list && list.length > 0) setChallenges(list);
-    });
   }, []);
 
   const score = useMemo(() => computeScore(progress), [progress]);
