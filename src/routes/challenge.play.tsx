@@ -358,12 +358,23 @@ function PlayPage() {
                           ref={viewerRef}
                           className="h-[520px] overflow-auto rounded-lg border border-border bg-[var(--surface)]"
                         >
-                          <div className="flex h-full min-h-[420px] items-center justify-center p-4">
+                          <div 
+                            className={`flex min-h-full min-w-full p-4 transition-all duration-200 ${
+                              zoom > 1 ? "items-start justify-start" : "items-center justify-center"
+                            }`}
+                            style={{
+                              width: zoom > 1 ? `${zoom * 100}%` : "100%",
+                              height: zoom > 1 ? `${zoom * 100}%` : "100%",
+                            }}
+                          >
                             <img
                               src={currentImage}
                               alt={currentEvidence.label}
-                              style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }}
-                              className="max-h-full max-w-full rounded-md object-contain"
+                              style={{
+                                maxWidth: "100%",
+                                maxHeight: "100%",
+                              }}
+                              className="rounded-md object-contain"
                             />
                           </div>
                         </div>
@@ -562,12 +573,23 @@ function PlayPage() {
             </div>
           </div>
           <div className="flex-1 overflow-auto p-6">
-            <div className="flex h-full items-center justify-center">
+            <div 
+              className={`flex min-h-full min-w-full transition-all duration-200 ${
+                zoom > 1 ? "items-start justify-start" : "items-center justify-center"
+              }`}
+              style={{
+                width: zoom > 1 ? `${zoom * 100}%` : "100%",
+                height: zoom > 1 ? `${zoom * 100}%` : "100%",
+              }}
+            >
               <img
                 src={currentImage}
                 alt={currentEvidence.label}
-                style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }}
-                className="max-h-full max-w-full rounded-md object-contain"
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                }}
+                className="rounded-md object-contain"
               />
             </div>
           </div>
