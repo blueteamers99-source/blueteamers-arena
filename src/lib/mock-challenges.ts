@@ -196,16 +196,11 @@ export const CHALLENGES: Challenge[] = [
       { id: "pcap", label: "Network Capture", filename: "network-capture.pcap", image: "/__EVIDENCE_PCAP__" },
     ],
     questions: [
-      { id: "q1", prompt: "What was the initial access vector?", kind: "text" },
-      { id: "q2", prompt: "What was the attacker dwell time (in hours)?", kind: "text" },
-      {
-        id: "q3",
-        prompt: "Which technique was used for persistence?",
-        kind: "mcq",
-        options: ["Scheduled Task", "Registry Run Key", "Service Creation", "WMI Subscription"],
-      },
-      { id: "q4", prompt: "What was the primary command-and-control (C2) IP address?", kind: "text" },
-      { id: "q5", prompt: "What data or artifact indicates the attacker's final objective?", kind: "text" },
+      { id: "q1", prompt: "What suspicious file was downloaded and executed during the initial stage of the intrusion?", kind: "text" },
+      { id: "q2", prompt: "At what time was the incident detected?", kind: "text" },
+      { id: "q3", prompt: "Which persistence technique was used by the attacker?", kind: "text" },
+      { id: "q4", prompt: "Which external IP address was repeatedly contacted by the compromised workstation?", kind: "text" },
+      { id: "q5", prompt: "Which file was prepared and attempted to be transferred from the compromised workstation?", kind: "text" },
     ],
   },
 ];

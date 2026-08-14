@@ -230,8 +230,11 @@ class Command(BaseCommand):
                     },
                 ],
                 "questions": [
-                    {"text": "What was the initial access vector?", "cat": "Digital Forensics", "diff": "Hard", "kind": "text", "pts": 200, "ans": "Phishing Email / Macro execution"},
-                    {"text": "Which technique was used for persistence?", "cat": "Digital Forensics", "diff": "Hard", "kind": "mcq", "opts": ["Scheduled Task", "Registry Run Key", "Service Creation", "WMI Subscription"], "correct_idx": 0, "pts": 200, "ans": "Scheduled Task"},
+                    {"text": "What suspicious file was downloaded and executed during the initial stage of the intrusion?", "cat": "Digital Forensics", "diff": "Hard", "kind": "text", "pts": 80, "ans": "update.ps1"},
+                    {"text": "At what time was the incident detected?", "cat": "Digital Forensics", "diff": "Hard", "kind": "text", "pts": 80, "ans": "09:10:22 UTC|09:10:22"},
+                    {"text": "Which persistence technique was used by the attacker?", "cat": "Digital Forensics", "diff": "Hard", "kind": "text", "pts": 80, "ans": "Registry Run Key persistence.|Registry Run Key"},
+                    {"text": "Which external IP address was repeatedly contacted by the compromised workstation?", "cat": "Digital Forensics", "diff": "Hard", "kind": "text", "pts": 80, "ans": "185.220.101.32"},
+                    {"text": "Which file was prepared and attempted to be transferred from the compromised workstation?", "cat": "Digital Forensics", "diff": "Hard", "kind": "text", "pts": 80, "ans": "backup.zip|backup.zip — containing Finance, HR, and Passwords.xlsx data."},
                 ],
             },
         ]
