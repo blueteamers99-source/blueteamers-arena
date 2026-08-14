@@ -111,6 +111,7 @@ function PlayPage() {
     setEv(getSelectedEvent());
     setRemaining(challenge.duration * 60);
     if (challenge.evidence?.length) setActiveEvidence(challenge.evidence[0].id);
+    setZoom(challenge.number === 5 ? 1.5 : 1);
 
     if (activeId && getProgress()[activeId] !== "completed") {
       setStatus(activeId, "in_progress");
@@ -181,9 +182,9 @@ function PlayPage() {
     setTimeout(() => setSaved(false), 1500);
   };
 
-  const zoomIn = () => setZoom((z) => Math.min(2, +(z + 0.25).toFixed(2)));
+  const zoomIn = () => setZoom((z) => Math.min(2.5, +(z + 0.25).toFixed(2)));
   const zoomOut = () => setZoom((z) => Math.max(0.5, +(z - 0.25).toFixed(2)));
-  const zoomReset = () => setZoom(1);
+  const zoomReset = () => setZoom(challenge?.number === 5 ? 1.5 : 1);
   const downloadEvidence = () => {
     if (!currentEvidence) return;
     const a = document.createElement("a");
@@ -196,7 +197,7 @@ function PlayPage() {
   const openFullscreen = () => setFullscreen(true);
   const selectEvidence = (id: string) => {
     setActiveEvidence(id);
-    setZoom(1);
+    setZoom(challenge?.number === 5 ? 1.5 : 1);
   };
 
 
