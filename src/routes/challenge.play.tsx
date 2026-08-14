@@ -181,7 +181,7 @@ function PlayPage() {
     setTimeout(() => setSaved(false), 1500);
   };
 
-  const zoomIn = () => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)));
+  const zoomIn = () => setZoom((z) => Math.min(2, +(z + 0.25).toFixed(2)));
   const zoomOut = () => setZoom((z) => Math.max(0.5, +(z - 0.25).toFixed(2)));
   const zoomReset = () => setZoom(1);
   const downloadEvidence = () => {
