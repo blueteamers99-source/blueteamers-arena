@@ -23,7 +23,7 @@ class Command(BaseCommand):
                                 "header": [{"key": "Content-Type", "value": "application/json"}],
                                 "body": {
                                     "mode": "raw",
-                                    "raw": json.dumps({"email": "admin@blueteamers.io", "password": "AdminPassword123!"}),
+                                    "raw": json.dumps({"email": "admin@blueteamers.io", "password": "{{admin_password}}"}),
                                 },
                                 "url": {"raw": "{{baseUrl}}/api/v1/auth/login/", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login", ""]},
                             },

@@ -17,6 +17,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.NOTICE("Starting Blueteamers Arena demo seeding..."))
 
         # 1. Create Admins
+        admin_password = os.getenv("DJANGO_SUPERUSER_PASSWORD", os.getenv("ADMIN_PASSWORD"))
         admin_user, created = User.objects.get_or_create(
             email="admin@blueteamers.io",
             defaults={
@@ -28,9 +29,10 @@ class Command(BaseCommand):
             },
         )
         if created:
-            admin_user.set_password("AdminPassword123!")
+            if admin_password:
+                admin_user.set_password(admin_password)
             admin_user.save()
-            self.stdout.write(self.style.SUCCESS("Created admin user: admin@blueteamers.io / AdminPassword123!"))
+            self.stdout.write(self.style.SUCCESS("Created admin user: admin@blueteamers.io"))
 
         # 2. Create Events
         events_data = [

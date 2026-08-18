@@ -11,12 +11,12 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         username = os.getenv("DJANGO_SUPERUSER_USERNAME", "admin")
         email = os.getenv("DJANGO_SUPERUSER_EMAIL", "admin@blueteamers.io")
-        password = os.getenv("DJANGO_SUPERUSER_PASSWORD", "Admin@123")
+        password = os.getenv("DJANGO_SUPERUSER_PASSWORD")
 
         if not password:
             self.stdout.write(
                 self.style.ERROR(
-                    "DJANGO_SUPERUSER_PASSWORD environment variable is not set."
+                    "DJANGO_SUPERUSER_PASSWORD environment variable is not set. Please provide DJANGO_SUPERUSER_PASSWORD via environment variable."
                 )
             )
             return
