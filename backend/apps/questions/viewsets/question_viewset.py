@@ -17,8 +17,10 @@ class QuestionViewSet(viewsets.ModelViewSet):
             return AdminQuestionSerializer
         return PublicQuestionSerializer
 
+    permission_classes = [IsAdmin]
+
     def get_permissions(self):
-        if self.action in ["list", "retrieve", "create", "update", "partial_update", "destroy"]:
+        if self.action in ["list", "retrieve"]:
             return [AllowAny()]
         return [IsAdmin()]
 

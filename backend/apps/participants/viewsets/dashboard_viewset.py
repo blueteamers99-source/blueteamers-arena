@@ -37,13 +37,6 @@ class DashboardViewSet(viewsets.ViewSet):
             except Exception:
                 pass
 
-        # 3. From query parameters or session localStorage user_email
-        email = request.query_params.get("email") or request.data.get("email")
-        if email:
-            p = Participant.objects.filter(email__iexact=str(email).strip().lower()).first()
-            if p:
-                return p
-
         return None
 
     @extend_schema(responses={200: DashboardSerializer})

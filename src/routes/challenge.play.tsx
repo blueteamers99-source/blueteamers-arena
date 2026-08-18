@@ -31,6 +31,9 @@ import {
   setStatus,
   saveProgressApi,
   submitChallengeApi,
+  fetchProgressApi,
+  startChallengeApi,
+  fetchChallengeDetailApi,
   type Challenge,
 } from "@/lib/mock-challenges";
 import evidenceEmail from "@/assets/evidence-email.png";
@@ -91,12 +94,16 @@ function PlayPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [current, setCurrent] = useState(0);
   const [remaining, setRemaining] = useState(0);
-  const [saved, setSaved] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [activeEvidence, setActiveEvidence] = useState<string>("");
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
   const viewerRef = useRef<HTMLDivElement | null>(null);
-
+  const initialLoadedRef = useRef(false);
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
+  const currentRef = useRef(current);
+  currentRef.current = current;
 
   useEffect(() => {
     const eventCode = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("arena.selectedEventCode") : null;
@@ -106,23 +113,115 @@ function PlayPage() {
     }
 
     const activeId = searchParams.challengeId || getActive() || "phishnet";
-    const challenge = CHALLENGES.find((x) => x.id === activeId) ?? CHALLENGES[0];
-    setChallenge(challenge);
+    const localChallenge = CHALLENGES.find((x) => x.id === activeId) ?? CHALLENGES[0];
+    setChallenge(localChallenge);
     setEv(getSelectedEvent());
-    setRemaining(challenge.duration * 60);
-    if (challenge.evidence?.length) setActiveEvidence(challenge.evidence[0].id);
-    setZoom(challenge.number === 5 ? 1.5 : 1);
+    setRemaining(localChallenge.duration * 60);
+    if (localChallenge.evidence?.length) setActiveEvidence(localChallenge.evidence[0].id);
+    setZoom(localChallenge.number === 5 ? 1.5 : 1);
+
+    // 1. Fetch live challenge definition if available
+    fetchChallengeDetailApi(activeId).then((serverChall) => {
+      if (serverChall) {
+        setChallenge(serverChall);
+      }
+    });
+
+    // 2. Fetch server-authoritative progress and resume state
+    startChallengeApi(activeId).then((progressState) => {
+      if (progressState) {
+        // Restore server-calculated remaining time
+        if (typeof progressState.remaining_time_seconds === "number") {
+          setRemaining(progressState.remaining_time_seconds);
+        }
+
+        // Restore saved answers from server
+        const restoredAnswers: Record<string, string> = {};
+        if (progressState.answers && typeof progressState.answers === "object") {
+          for (const [k, v] of Object.entries(progressState.answers)) {
+            if (v !== undefined && v !== null) {
+              restoredAnswers[k] = String(v);
+            }
+          }
+        } else if (progressState.draft_answers && typeof progressState.draft_answers === "object") {
+          for (const [k, v] of Object.entries(progressState.draft_answers)) {
+            if (v && typeof v === "object" && "answer_text" in v) {
+              restoredAnswers[k] = (v as any).answer_text || "";
+            } else if (v !== undefined && v !== null) {
+              restoredAnswers[k] = String(v);
+            }
+          }
+        }
+
+        if (Object.keys(restoredAnswers).length > 0) {
+          setAnswers((prev) => ({ ...prev, ...restoredAnswers }));
+        }
+
+        // Restore question index
+        if (typeof progressState.current_question_index === "number" && progressState.current_question_index >= 0) {
+          setCurrent(progressState.current_question_index);
+        }
+
+        if (progressState.status) {
+          setStatus(activeId, progressState.status === "completed" ? "completed" : "in_progress");
+        }
+      }
+      initialLoadedRef.current = true;
+    }).catch(() => {
+      initialLoadedRef.current = true;
+    });
 
     if (activeId && getProgress()[activeId] !== "completed") {
       setStatus(activeId, "in_progress");
     }
   }, [searchParams.challengeId]);
 
-
+  // Server-authoritative timer countdown
   useEffect(() => {
     if (!challenge) return;
     const id = setInterval(() => setRemaining((r) => (r > 0 ? r - 1 : 0)), 1000);
     return () => clearInterval(id);
+  }, [challenge]);
+
+  // Debounced auto-save on answers or current question changes
+  useEffect(() => {
+    if (!initialLoadedRef.current || !challenge) return;
+    setSaveStatus("saving");
+    const timer = setTimeout(async () => {
+      const ok = await saveProgressApi(
+        challenge.id,
+        answers,
+        current,
+        Object.keys(answers),
+      );
+      if (ok) {
+        setSaveStatus("saved");
+        setTimeout(() => setSaveStatus("idle"), 2500);
+      } else {
+        setSaveStatus("error");
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [answers, current, challenge]);
+
+  // Unload listener for emergency auto-save
+  useEffect(() => {
+    const handleUnload = () => {
+      if (challenge && initialLoadedRef.current) {
+        saveProgressApi(
+          challenge.id,
+          answersRef.current,
+          currentRef.current,
+          Object.keys(answersRef.current),
+        );
+      }
+    };
+    window.addEventListener("beforeunload", handleUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      handleUnload();
+    };
   }, [challenge]);
 
   const answered = useMemo(
@@ -177,9 +276,14 @@ function PlayPage() {
   };
 
   const saveProgress = async () => {
-    setSaved(true);
-    await saveProgressApi(challenge.id, answers);
-    setTimeout(() => setSaved(false), 1500);
+    setSaveStatus("saving");
+    const ok = await saveProgressApi(challenge.id, answers, current, Object.keys(answers));
+    if (ok) {
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2500);
+    } else {
+      setSaveStatus("error");
+    }
   };
 
   const zoomIn = () => setZoom((z) => Math.min(2.5, +(z + 0.25).toFixed(2)));
@@ -477,9 +581,24 @@ function PlayPage() {
             </button>
             <button
               onClick={saveProgress}
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-[var(--surface)] px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+              className={`inline-flex items-center gap-2 rounded-md border border-border bg-[var(--surface)] px-4 py-2 text-sm font-medium transition-colors ${
+                saveStatus === "saved"
+                  ? "text-emerald-400 border-emerald-500/40"
+                  : saveStatus === "saving"
+                  ? "text-blue-400 animate-pulse border-blue-500/40"
+                  : saveStatus === "error"
+                  ? "text-rose-400 border-rose-500/40"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
-              <Save className="h-4 w-4" /> {saved ? "Saved" : "Save Progress"}
+              <Save className="h-4 w-4" />{" "}
+              {saveStatus === "saving"
+                ? "Auto-saving..."
+                : saveStatus === "saved"
+                ? "Saved ✓"
+                : saveStatus === "error"
+                ? "Save Error (Retry)"
+                : "Save Progress"}
             </button>
             {current < questions.length - 1 ? (
               <button

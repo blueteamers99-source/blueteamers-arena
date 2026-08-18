@@ -16,8 +16,10 @@ class ParticipantViewSet(viewsets.ModelViewSet):
     queryset = Participant.objects.all()
     serializer_class = ParticipantSerializer
 
+    permission_classes = [IsAdmin]
+
     def get_permissions(self):
-        if self.action in ["list", "retrieve", "create", "register_student"]:
+        if self.action == "register_student":
             return [AllowAny()]
         return [IsAdmin()]
 

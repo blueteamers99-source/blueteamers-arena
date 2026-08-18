@@ -25,6 +25,8 @@ import {
   computeScore,
   getProgress,
   startChallengeApi,
+  fetchAllProgressApi,
+  fetchChallengesApi,
   type Challenge,
   type ProgressMap,
 } from "@/lib/mock-challenges";
@@ -33,7 +35,7 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
   const navigate = useNavigate();
   const [ev, setEv] = useState<MockEvent | null>(null);
   const [progress, setProgress] = useState<ProgressMap>({});
-  const [challenges] = useState<Challenge[]>(CHALLENGES);
+  const [challenges, setChallenges] = useState<Challenge[]>(CHALLENGES);
   const [selected, setSelected] = useState<Challenge | null>(null);
   const [search, setSearch] = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("All");
@@ -41,6 +43,25 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
   useEffect(() => {
     setEv(getSelectedEvent());
     setProgress(getProgress());
+
+    // Fetch live progress state from PostgreSQL backend
+    fetchAllProgressApi().then((serverProgress) => {
+      if (serverProgress && Object.keys(serverProgress).length > 0) {
+        const merged: ProgressMap = { ...getProgress() };
+        for (const [k, v] of Object.entries(serverProgress)) {
+          merged[k] = v.status;
+        }
+        setProgress(merged);
+        sessionStorage.setItem("arena.challengeProgress", JSON.stringify(merged));
+      }
+    });
+
+    // Fetch challenge definitions
+    fetchChallengesApi().then((serverChallenges) => {
+      if (serverChallenges && serverChallenges.length > 0) {
+        setChallenges(serverChallenges);
+      }
+    });
   }, []);
 
   const score = useMemo(() => computeScore(progress), [progress]);
@@ -189,6 +210,7 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
       {selected && (
         <DetailsModal
           challenge={selected}
+          status={progress[selected.id] ?? "not_started"}
           accentText={accent.text}
           accentBg={accent.bg}
           accentHover={accent.hover}
@@ -245,6 +267,7 @@ function StatusBadge({ status }: { status: "not_started" | "in_progress" | "comp
 
 function DetailsModal({
   challenge,
+  status = "not_started",
   accentText,
   accentBg,
   accentHover,
@@ -252,6 +275,7 @@ function DetailsModal({
   onStart,
 }: {
   challenge: Challenge;
+  status?: "not_started" | "in_progress" | "completed";
   accentText: string;
   accentBg: string;
   accentHover: string;
@@ -345,7 +369,7 @@ function DetailsModal({
             onClick={onStart}
             className={`flex-1 inline-flex items-center justify-center gap-2 rounded-lg ${accentBg} ${accentHover} px-5 py-2.5 text-sm font-semibold text-white transition-colors`}
           >
-            Start Challenge <ArrowRight className="h-4 w-4" />
+            {status === "in_progress" ? "Resume Challenge" : status === "completed" ? "View Results" : "Start Challenge"} <ArrowRight className="h-4 w-4" />
           </button>
         </div>
       </div>

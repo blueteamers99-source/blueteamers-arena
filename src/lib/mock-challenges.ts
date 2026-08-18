@@ -1,3 +1,5 @@
+import { API_BASE_URL } from "./config";
+
 export type Difficulty = "Easy" | "Medium" | "Hard";
 export type ChallengeStatus = "not_started" | "in_progress" | "completed";
 
@@ -254,11 +256,79 @@ export const DIFFICULTY_BADGE: Record<Difficulty, string> = {
   Hard: "bg-rose-500/10 text-rose-400 border-rose-500/30",
 };
 
-import { API_BASE_URL } from "./config";
+export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return (
+    localStorage.getItem("student_access_token") ||
+    sessionStorage.getItem("student_access_token") ||
+    localStorage.getItem("blueteamers_participant_token") ||
+    sessionStorage.getItem("blueteamers_participant_token") ||
+    localStorage.getItem("blueteamers_access_token") ||
+    sessionStorage.getItem("blueteamers_access_token") ||
+    null
+  );
+}
+
+export interface ChallengeProgressState {
+  status: "not_started" | "in_progress" | "completed" | "expired";
+  current_question_index: number;
+  visited_questions: string[];
+  answered_questions: number;
+  total_questions: number;
+  score_earned: number;
+  max_possible_score: number;
+  time_limit_seconds: number;
+  remaining_time_seconds: number;
+  draft_answers: Record<string, any>;
+  answers: Record<string, string>;
+  started_at?: string | null;
+  last_activity_at?: string | null;
+  completed_at?: string | null;
+}
+
+export async function fetchAllProgressApi(): Promise<Record<string, { status: ChallengeStatus; score_earned?: number; answered_questions?: number; remaining_time_seconds?: number }>> {
+  try {
+    const token = getAuthToken();
+    const res = await fetch(`${API_BASE_URL}/progress/`, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (!res.ok) return {};
+    const json = await res.json();
+    return json.data || {};
+  } catch {
+    return {};
+  }
+}
+
+export async function fetchProgressApi(id: string): Promise<ChallengeProgressState | null> {
+  try {
+    const token = getAuthToken();
+    const res = await fetch(`${API_BASE_URL}/challenges/${id}/progress/`, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data || json;
+  } catch {
+    return null;
+  }
+}
 
 export async function fetchChallengesApi(): Promise<Challenge[]> {
   try {
-    const res = await fetch(`${API_BASE_URL}/challenges/`);
+    const token = getAuthToken();
+    const res = await fetch(`${API_BASE_URL}/challenges/`, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
     if (!res.ok) return CHALLENGES;
     const json = await res.json();
     const list = json.results || json.data || json;
@@ -291,7 +361,13 @@ export async function fetchChallengesApi(): Promise<Challenge[]> {
 
 export async function fetchChallengeDetailApi(id: string): Promise<Challenge | null> {
   try {
-    const res = await fetch(`${API_BASE_URL}/challenges/${id}/`);
+    const token = getAuthToken();
+    const res = await fetch(`${API_BASE_URL}/challenges/${id}/`, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
     if (!res.ok) return CHALLENGES.find((c) => c.id === id) || null;
     const json = await res.json();
     const item = json.challenge || json.data || json;
@@ -320,50 +396,65 @@ export async function fetchChallengeDetailApi(id: string): Promise<Challenge | n
   return CHALLENGES.find((c) => c.id === id) || null;
 }
 
-export async function startChallengeApi(id: string): Promise<void> {
+export async function startChallengeApi(id: string): Promise<ChallengeProgressState | null> {
   setActive(id);
   setStatus(id, "in_progress");
   try {
-    const token = localStorage.getItem("blueteamers_participant_token") || sessionStorage.getItem("blueteamers_participant_token");
-    await fetch(`${API_BASE_URL}/challenges/${id}/start/`, {
+    const token = getAuthToken();
+    const res = await fetch(`${API_BASE_URL}/challenges/${id}/start/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
+    if (res.ok) {
+      const json = await res.json();
+      return json.data || json;
+    }
   } catch {
     // silent
   }
+  return null;
 }
 
-export async function saveProgressApi(id: string, answers: Record<string, string>): Promise<void> {
+export async function saveProgressApi(
+  id: string,
+  answers: Record<string, string>,
+  currentQuestionIndex: number = 0,
+  visitedQuestions: string[] = []
+): Promise<boolean> {
   try {
-    const token = localStorage.getItem("blueteamers_participant_token") || sessionStorage.getItem("blueteamers_participant_token");
-    await fetch(`${API_BASE_URL}/challenges/${id}/save-progress/`, {
+    const token = getAuthToken();
+    const res = await fetch(`${API_BASE_URL}/challenges/${id}/save-progress/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ answers }),
+      body: JSON.stringify({
+        answers,
+        current_question_index: currentQuestionIndex,
+        visited_questions: visitedQuestions,
+      }),
     });
+    return res.ok;
   } catch {
-    // silent
+    return false;
   }
 }
 
 export async function submitChallengeApi(id: string, answers: Record<string, string>): Promise<any> {
   setStatus(id, "completed");
   try {
-    const token = localStorage.getItem("blueteamers_participant_token") || sessionStorage.getItem("blueteamers_participant_token");
-    const res = await fetch(`${API_BASE_URL}/submissions/submit/`, {
+    const token = getAuthToken();
+    const res = await fetch(`${API_BASE_URL}/challenges/${id}/submit/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ challenge_id: id, answers }),
+      body: JSON.stringify({ answers }),
     });
     if (res.ok) {
       return await res.json();

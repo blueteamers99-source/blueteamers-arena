@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from drf_spectacular.utils import extend_schema
 from apps.common.utils.response import success_response
+from apps.common.throttling import VerifyCodeRateThrottle
 from apps.events.services.event_service import EventService
 from apps.events.selectors.event_selector import EventSelector
 from apps.events.serializers.event_serializer import EventSerializer
@@ -18,7 +19,7 @@ class StudentArenaViewSet(viewsets.ViewSet):
     permission_classes = [AllowAny]
 
     @extend_schema(request=VerifyEventRequestSerializer)
-    @action(detail=False, methods=["post"], url_path="verify-code")
+    @action(detail=False, methods=["post"], url_path="verify-code", throttle_classes=[VerifyCodeRateThrottle])
     def verify_code(self, request):
         serializer = VerifyEventRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

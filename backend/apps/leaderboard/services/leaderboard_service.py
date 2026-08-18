@@ -45,17 +45,24 @@ class LeaderboardService:
                 secs = int(diff.total_seconds() % 60)
                 time_display = f"{mins:02d}:{secs:02d}"
 
+            is_curr = bool(student_participant and p.id == student_participant.id)
+            if is_curr:
+                display_email = p.email
+            else:
+                parts = p.email.split("@")
+                display_email = f"{parts[0][:2]}***@{parts[1]}" if len(parts) == 2 and len(parts[0]) >= 2 else f"***@{parts[-1]}" if len(parts) == 2 else "***"
+
             ranked_list.append({
                 "rank": index,
                 "participant_id": str(p.id),
                 "name": p.name,
-                "email": p.email,
+                "email": display_email,
                 "college_name": p.event.college_name,
                 "event_code": p.event.event_code,
                 "score": p.score,
                 "completed": p.completed,
                 "time_taken": time_display,
-                "is_current_user": bool(student_participant and p.id == student_participant.id),
+                "is_current_user": is_curr,
             })
 
         top3 = ranked_list[:3]

@@ -17,9 +17,9 @@ from apps.accounts.serializers.admin_platform_serializer import (
 class AdminPlatformViewSet(viewsets.ViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
+    permission_classes = [IsAdmin]
+
     def get_permissions(self):
-        if self.action in ["dashboard", "event_analytics", "question_analytics", "seed_data"]:
-            return [AllowAny()]
         return [IsAdmin()]
 
     @extend_schema(responses={200: dict})

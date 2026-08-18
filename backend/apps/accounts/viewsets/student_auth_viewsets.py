@@ -67,11 +67,10 @@ class StudentGoogleAuthView(APIView):
     def post(self, request):
         serializer = GoogleAuthSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data.get("email") or "google.student@blueteamers.io"
-        name = serializer.validated_data.get("name") or "Google Student"
+        credential = serializer.validated_data.get("credential")
 
         try:
-            user, tokens = GoogleAuthService.authenticate_google_student(email=email, name=name)
+            user, tokens = GoogleAuthService.authenticate_google_student(credential=credential)
             return success_response(
                 data={
                     "user": StudentProfileSerializer(user).data,
@@ -79,8 +78,8 @@ class StudentGoogleAuthView(APIView):
                 },
                 message="Google Authentication successful.",
             )
-        except ValueError as e:
-            return error_response(message=str(e), status_code=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return error_response(message=str(e), status_code=status.HTTP_401_UNAUTHORIZED)
 
 
 class StudentProfileUpdateView(APIView):

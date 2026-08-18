@@ -33,13 +33,6 @@ class LeaderboardViewSet(viewsets.ViewSet):
             except Exception:
                 pass
 
-        from apps.participants.models.participant import Participant
-        email = request.query_params.get("email") or request.data.get("email")
-        if email:
-            p = Participant.objects.filter(email__iexact=str(email).strip().lower()).first()
-            if p:
-                return p
-
         return None
 
     @extend_schema(responses={200: LeaderboardResponseSerializer})

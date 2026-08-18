@@ -18,7 +18,12 @@ export function AdminPortalLogin({ onSuccess }: AdminPortalLoginProps) {
     setLoading(true);
     setError(null);
 
-    const loginInput = username.trim() || "admin@blueteamers.io";
+    const loginInput = username.trim();
+    if (!loginInput || !password) {
+      setError("Please enter both username/email and password.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch(`${API_BASE_URL}/admin/login/`, {
@@ -26,7 +31,7 @@ export function AdminPortalLogin({ onSuccess }: AdminPortalLoginProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username_or_email: loginInput,
-          password: password || "Admin@123",
+          password: password,
         }),
       });
 

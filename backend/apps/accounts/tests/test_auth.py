@@ -1,3 +1,4 @@
+from unittest.mock import patch
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
@@ -74,11 +75,16 @@ class AuthenticationSystemTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["success"])
 
-    def test_google_auth_student_auto_creation(self):
-        payload = {
-            "credential": "google-oauth-mock-credential-token",
+    @patch("apps.accounts.services.google_auth_service.GoogleAuthService.verify_google_id_token")
+    def test_google_auth_student_auto_creation(self, mock_verify):
+        mock_verify.return_value = {
+            "iss": "accounts.google.com",
             "email": "new.google.student@college.edu",
             "name": "New Google Student",
+            "email_verified": True,
+        }
+        payload = {
+            "credential": "valid-mock-google-id-token",
         }
         response = self.client.post("/api/v1/auth/google/", payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)

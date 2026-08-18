@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { User, Mail, Lock, AlertCircle, Loader2 } from "lucide-react";
+import { User, Mail, AlertCircle, Loader2 } from "lucide-react";
 import { ACCENT_CLASSES, getSelectedEvent, saveStudentName, type Accent } from "@/lib/mock-events";
 import { API_BASE_URL } from "@/lib/config";
 
@@ -62,8 +62,12 @@ function Student() {
       if (res.ok && data.success) {
         saveStudentName(name.trim());
         localStorage.setItem("user_email", email.trim().toLowerCase());
-        const token = data.access || data.tokens?.access;
-        if (token) localStorage.setItem("student_access_token", token);
+        const token = data.access || data.tokens?.access || data.participant_token || data.token;
+        if (token) {
+          localStorage.setItem("student_access_token", token);
+          localStorage.setItem("blueteamers_participant_token", token);
+          sessionStorage.setItem("blueteamers_participant_token", token);
+        }
         navigate({ to: "/dashboard" });
       } else {
         setError(data.message || data.detail || "You are not authorized for this event. Please use the same Name and Email that were submitted during registration.");
@@ -114,7 +118,7 @@ function Student() {
                   setName(e.target.value);
                   setError("");
                 }}
-                placeholder="Registered Name (e.g. Jaswanth Naik)"
+                placeholder="Registered Name"
                 disabled={loading}
                 className="w-full rounded-lg border border-border bg-[var(--surface)] py-3 pl-10 pr-3 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none"
               />
@@ -127,7 +131,7 @@ function Student() {
                   setEmail(e.target.value);
                   setError("");
                 }}
-                placeholder="Registered College Email (e.g. jaswanth@vrsec.ac.in)"
+                placeholder="Registered College Email"
                 disabled={loading}
                 className="w-full rounded-lg border border-border bg-[var(--surface)] py-3 pl-10 pr-3 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none"
               />
@@ -155,11 +159,6 @@ function Student() {
               )}
             </button>
           </form>
-
-          <p className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground text-center">
-            <Lock className="h-3 w-3 shrink-0" />
-            Backend verifies registered credentials against PostgreSQL.
-          </p>
         </div>
       </div>
     </main>

@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny
 from drf_spectacular.utils import extend_schema
 
 from apps.common.utils.response import success_response, error_response
+from apps.common.throttling import VerifyCodeRateThrottle
 from apps.accounts.permissions.is_admin import IsAdmin
 from apps.events.models.event import Event
 from apps.events.selectors.event_selector import EventSelector
@@ -17,8 +18,10 @@ class EventViewSet(viewsets.ModelViewSet):
     queryset = Event.objects.all()
     serializer_class = EventSerializer
 
+    permission_classes = [IsAdmin]
+
     def get_permissions(self):
-        if self.action in ["list", "retrieve", "validate_code", "verify_code", "upload_students", "approved_students"]:
+        if self.action in ["validate_code", "verify_code"]:
             return [AllowAny()]
         return [IsAdmin()]
 
@@ -45,7 +48,7 @@ class EventViewSet(viewsets.ModelViewSet):
         )
 
     @extend_schema(request=VerifyEventCodeSerializer)
-    @action(detail=False, methods=["post"], url_path="validate-code", permission_classes=[AllowAny])
+    @action(detail=False, methods=["post"], url_path="validate-code", permission_classes=[AllowAny], throttle_classes=[VerifyCodeRateThrottle])
     def validate_code(self, request):
         serializer = VerifyEventCodeSerializer(data=request.data)
         if not serializer.is_valid():
@@ -75,7 +78,7 @@ class EventViewSet(viewsets.ModelViewSet):
         )
 
     @extend_schema(request=VerifyEventCodeSerializer)
-    @action(detail=False, methods=["post"], url_path="verify-code", permission_classes=[AllowAny])
+    @action(detail=False, methods=["post"], url_path="verify-code", permission_classes=[AllowAny], throttle_classes=[VerifyCodeRateThrottle])
     def verify_code(self, request):
         return self.validate_code(request)
 
@@ -91,7 +94,7 @@ class EventViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
-    @action(detail=True, methods=["post"], url_path="upload-students", permission_classes=[AllowAny])
+    @action(detail=True, methods=["post"], url_path="upload-students", permission_classes=[IsAdmin])
     def upload_students(self, request, pk=None):
         import csv
         import io

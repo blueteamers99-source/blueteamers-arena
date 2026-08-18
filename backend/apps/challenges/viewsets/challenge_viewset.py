@@ -15,7 +15,7 @@ from apps.challenges.serializers.student_challenge_serializer import (
     StudentChallengeListSerializer,
     StudentChallengeDetailSerializer,
 )
-from apps.submissions.services.submission_service import SubmissionService
+from apps.participants.services.progress_service import ProgressService
 from apps.submissions.serializers.submission_serializer import (
     SubmissionSerializer,
     SubmitAnswersRequestSerializer,
@@ -29,7 +29,8 @@ class ChallengeViewSet(viewsets.ModelViewSet):
     authentication_classes = [ParticipantTokenAuthentication]
 
     def get_permissions(self):
-        if self.action in ["list", "retrieve", "evidence", "submit", "create", "start", "save_progress"]:
+        # Challenge modification actions (create, update, destroy) require IsAdmin
+        if self.action in ["list", "retrieve", "evidence", "submit", "start", "save_progress", "progress"]:
             return [AllowAny()]
         return [IsAdmin()]
 
@@ -53,13 +54,15 @@ class ChallengeViewSet(viewsets.ModelViewSet):
 
         # Event verification check
         participant = getattr(request, "participant", None)
-        if participant and hasattr(challenge, "event") and challenge.event:
-            if challenge.event != participant.event:
-                from rest_framework.response import Response
+        if not participant and request.user:
+            participant = getattr(request.user, "participant", None)
+
+        challenge_event = getattr(challenge, "event", None)
+        if participant and challenge_event:
+            if getattr(challenge, "event_id", None) != participant.event_id:
                 return Response({"success": False, "message": "Forbidden. Cross-event challenge access denied."}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = self.get_serializer(challenge)
-        from rest_framework.response import Response
         res_data = {**serializer.data, "success": True, "data": serializer.data, "challenge": serializer.data}
         return Response(res_data, status=status.HTTP_200_OK)
 
@@ -126,24 +129,27 @@ class ChallengeViewSet(viewsets.ModelViewSet):
             participant = getattr(request.user, "participant", None)
 
         if not participant:
-            return success_response(message="Participant authentication token required.", status_code=status.HTTP_401_UNAUTHORIZED)
+            return Response({"success": False, "message": "Participant authentication token required."}, status=status.HTTP_401_UNAUTHORIZED)
 
         challenge = ChallengeSelector.get_by_slug_or_id(slug)
         if not challenge:
-            return success_response(message="Challenge not found.", status_code=status.HTTP_404_NOT_FOUND)
+            return Response({"success": False, "message": "Challenge not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = SubmitAnswersRequestSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        challenge_event = getattr(challenge, "event", None)
+        if challenge_event and participant.event_id != getattr(challenge, "event_id", None):
+            return Response({"success": False, "message": "Forbidden. Cross-event challenge submission denied."}, status=status.HTTP_403_FORBIDDEN)
 
-        submission = SubmissionService.submit_answers(
-            participant=participant,
-            challenge=challenge,
-            answers=serializer.validated_data["answers"],
-        )
-        return success_response(
-            data=SubmissionSerializer(submission).data,
-            message=f"Answers for '{challenge.name}' submitted and graded successfully!",
-        )
+        answers = request.data.get("answers") or {}
+        result = ProgressService.submit_challenge(participant, challenge, answers_override=answers)
+        return Response({
+            "success": True,
+            "data": result,
+            "score_earned": result.get("score_earned", 0),
+            "max_possible_score": result.get("max_possible_score", 100),
+            "is_passing": result.get("is_passing", False),
+            "total_score": participant.score,
+            "message": result.get("message", f"Answers for '{challenge.name}' evaluated and submitted successfully!"),
+        }, status=status.HTTP_200_OK)
 
     @extend_schema(responses={200: dict})
     @action(detail=True, methods=["post"], url_path="start")
@@ -153,53 +159,77 @@ class ChallengeViewSet(viewsets.ModelViewSet):
             return Response({"success": False, "message": "Challenge not found."}, status=status.HTTP_404_NOT_FOUND)
 
         participant = getattr(request, "participant", None)
-        if participant:
-            from apps.participants.models.participant_progress import ParticipantProgress
-            from django.utils import timezone
-            prog, _ = ParticipantProgress.objects.get_or_create(
-                participant=participant,
-                challenge=challenge,
-                defaults={"status": ParticipantProgress.StatusChoices.IN_PROGRESS, "started_at": timezone.now()}
-            )
-            if prog.status == ParticipantProgress.StatusChoices.NOT_STARTED:
-                prog.status = ParticipantProgress.StatusChoices.IN_PROGRESS
-                prog.started_at = timezone.now()
-                prog.save()
+        if not participant and request.user:
+            participant = getattr(request.user, "participant", None)
 
+        if not participant:
+            return Response({
+                "success": True,
+                "message": f"Challenge '{challenge.name}' started.",
+                "challenge_id": str(challenge.slug),
+                "status": "in_progress",
+            }, status=status.HTTP_200_OK)
+
+        data = ProgressService.start_challenge(participant, challenge)
         return Response({
             "success": True,
+            "data": data,
             "message": f"Challenge '{challenge.name}' started successfully.",
             "challenge_id": str(challenge.slug),
-            "status": "in_progress",
+            "status": data.get("status", "in_progress"),
+            "remaining_time_seconds": data.get("remaining_time_seconds", 1200),
         }, status=status.HTTP_200_OK)
 
     @extend_schema(responses={200: dict})
-    @action(detail=True, methods=["post"], url_path="save-progress")
+    @action(detail=True, methods=["get"], url_path="progress")
+    def progress(self, request, slug=None):
+        challenge = ChallengeSelector.get_by_slug_or_id(slug)
+        if not challenge:
+            return Response({"success": False, "message": "Challenge not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        participant = getattr(request, "participant", None)
+        if not participant and request.user:
+            participant = getattr(request.user, "participant", None)
+
+        if not participant:
+            return Response({"success": False, "message": "Participant authentication token required."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        data = ProgressService.get_challenge_progress(participant, challenge)
+        return Response({
+            "success": True,
+            "data": data,
+            "message": "Progress retrieved successfully.",
+        }, status=status.HTTP_200_OK)
+
+    @extend_schema(responses={200: dict})
+    @action(detail=True, methods=["post", "put", "patch"], url_path="save-progress")
     def save_progress(self, request, slug=None):
         challenge = ChallengeSelector.get_by_slug_or_id(slug)
         if not challenge:
             return Response({"success": False, "message": "Challenge not found."}, status=status.HTTP_404_NOT_FOUND)
 
         participant = getattr(request, "participant", None)
-        if participant:
-            from apps.participants.models.participant_progress import ParticipantProgress
-            prog, _ = ParticipantProgress.objects.get_or_create(
-                participant=participant,
-                challenge=challenge,
-            )
-            answers = request.data.get("answers") or {}
-            curr_idx = request.data.get("current_question_index", 0)
-            visited = request.data.get("visited_questions", [])
-            time_rem = request.data.get("remaining_seconds", 0)
+        if not participant and request.user:
+            participant = getattr(request.user, "participant", None)
 
-            prog.draft_answers = answers
-            prog.current_question_index = curr_idx
-            prog.visited_questions = visited
-            prog.remaining_seconds = time_rem
-            prog.save()
+        if not participant:
+            return Response({"success": False, "message": "Participant authentication token required."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        answers = request.data.get("answers") or {}
+        curr_idx = request.data.get("current_question_index", 0)
+        visited = request.data.get("visited_questions", [])
+
+        data = ProgressService.save_batch_progress(
+            participant=participant,
+            challenge=challenge,
+            answers=answers,
+            current_question_index=curr_idx,
+            visited_questions=visited,
+        )
 
         return Response({
             "success": True,
+            "data": data,
+            "saved": True,
             "message": "Challenge progress saved successfully.",
         }, status=status.HTTP_200_OK)
-

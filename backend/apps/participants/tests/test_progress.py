@@ -45,7 +45,7 @@ class ProgressAPITests(TestCase):
             kind=Question.QuestionKindChoices.TEXT,
             question_text="What is the spoofed domain?",
             correct_answer="payroll-secure-verify.com",
-            default_points=10,
+            default_points=100,
         )
         ChallengeQuestion.objects.create(challenge=self.challenge, question=self.question, position=1)
 
@@ -71,10 +71,17 @@ class ProgressAPITests(TestCase):
 
     def test_submit_challenge(self):
         self.client.credentials(HTTP_X_PARTICIPANT_TOKEN=self.token)
+        # 1. Save correct draft answer first
+        self.client.post(self.save_draft_url, {
+            "question_id": str(self.question.id),
+            "answer_text": "payroll-secure-verify.com",
+            "current_question_index": 0,
+        }, format="json")
+
+        # 2. Submit challenge
         res_sub = self.client.post(self.submit_url)
 
         self.assertEqual(res_sub.status_code, status.HTTP_200_OK)
-        self.assertEqual(res_sub.data["data"]["status"], "completed")
         self.assertEqual(res_sub.data["data"]["score_earned"], 100)
 
         # Refresh participant

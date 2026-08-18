@@ -81,26 +81,10 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
         setStudentAuth(data.data.tokens, data.data.user);
         navigate({ to: "/dashboard" });
       } else {
-        const fallbackUser = {
-          id: String(Date.now()),
-          email: identifier.includes("@") ? identifier : `${identifier}@student.ac.in`,
-          username: identifier.split("@")[0],
-          full_name: identifier.split("@")[0].toUpperCase(),
-          role: "STUDENT" as const,
-        };
-        setStudentAuth({ access: "demo-student-access", refresh: "demo-student-refresh" }, fallbackUser);
-        navigate({ to: "/dashboard" });
+        setLoginError(data.message || "Invalid credentials.");
       }
     } catch {
-      const fallbackUser = {
-        id: String(Date.now()),
-        email: identifier.includes("@") ? identifier : `${identifier}@student.ac.in`,
-        username: identifier.split("@")[0],
-        full_name: identifier.split("@")[0].toUpperCase(),
-        role: "STUDENT" as const,
-      };
-      setStudentAuth({ access: "demo-student-access", refresh: "demo-student-refresh" }, fallbackUser);
-      navigate({ to: "/dashboard" });
+      setLoginError("Authentication service unavailable. Please try again later.");
     } finally {
       setLoginLoading(false);
     }
@@ -148,17 +132,7 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
         setSignupError(msg);
       }
     } catch {
-      const newUser = {
-        id: String(Date.now()),
-        email: signupEmail,
-        username,
-        full_name: fullName,
-        college,
-        department,
-        role: "STUDENT" as const,
-      };
-      setStudentAuth({ access: "demo-signup-access", refresh: "demo-signup-refresh" }, newUser);
-      navigate({ to: "/dashboard" });
+      setSignupError("Unable to connect to registration service. Please try again.");
     } finally {
       setSignupLoading(false);
     }

@@ -27,10 +27,15 @@ class EventsAPITests(TestCase):
         self.detail_url = reverse("event-detail", kwargs={"pk": str(self.event.id)})
         self.verify_url = reverse("event-verify-code")
 
-    def test_list_events_public(self):
-        response = self.client.get(self.list_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 1)
+    def test_list_events_admin_required(self):
+        # Unauthenticated request returns 401
+        response_unauth = self.client.get(self.list_url)
+        self.assertEqual(response_unauth.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # Authenticated Admin request returns 200
+        self.client.force_authenticate(user=self.admin)
+        response_auth = self.client.get(self.list_url)
+        self.assertEqual(response_auth.status_code, status.HTTP_200_OK)
 
     def test_verify_event_code_success(self):
         response = self.client.post(
