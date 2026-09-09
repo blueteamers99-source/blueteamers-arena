@@ -24,6 +24,7 @@ import {
   completedCount,
   computeScore,
   getProgress,
+  setProgressMap,
   startChallengeApi,
   fetchAllProgressApi,
   fetchChallengesApi,
@@ -44,15 +45,20 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
     setEv(getSelectedEvent());
     setProgress(getProgress());
 
-    // Fetch live progress state from PostgreSQL backend
+    // Fetch live progress state from PostgreSQL backend.
+    // A successful fetch is AUTHORITATIVE even when empty — a brand-new user
+    // has no ParticipantProgress rows, so the server legitimately returns {}
+    // and any stale local "completed" entries must be discarded (previously
+    // empty server responses were skipped, so new users inherited another
+    // account's completed statuses from sessionStorage).
     fetchAllProgressApi().then((serverProgress) => {
-      if (serverProgress && Object.keys(serverProgress).length > 0) {
-        const merged: ProgressMap = { ...getProgress() };
+      if (serverProgress !== null) {
+        const authoritative: ProgressMap = {};
         for (const [k, v] of Object.entries(serverProgress)) {
-          merged[k] = v.status;
+          authoritative[k] = v.status;
         }
-        setProgress(merged);
-        sessionStorage.setItem("arena.challengeProgress", JSON.stringify(merged));
+        setProgress(authoritative);
+        setProgressMap(authoritative);
       }
     });
 

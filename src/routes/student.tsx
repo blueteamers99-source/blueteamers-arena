@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { User, Mail, AlertCircle, Loader2 } from "lucide-react";
 import { ACCENT_CLASSES, getSelectedEvent, saveStudentName, type Accent } from "@/lib/mock-events";
 import { API_BASE_URL } from "@/lib/config";
+import { setStudentAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/student")({
   component: Student,
@@ -63,8 +64,18 @@ function Student() {
         saveStudentName(name.trim());
         localStorage.setItem("user_email", email.trim().toLowerCase());
         const token = data.access || data.tokens?.access || data.participant_token || data.token;
+        const refreshToken = data.refresh || data.tokens?.refresh || "";
         if (token) {
-          localStorage.setItem("student_access_token", token);
+          const participant = data.data || data.participant || {};
+          setStudentAuth(
+            { access: token, refresh: refreshToken },
+            {
+              id: participant.id || "",
+              email: participant.email || email.trim().toLowerCase(),
+              username: participant.name || name.trim(),
+              role: "STUDENT",
+            }
+          );
           localStorage.setItem("blueteamers_participant_token", token);
           sessionStorage.setItem("blueteamers_participant_token", token);
         }
@@ -74,9 +85,7 @@ function Student() {
       }
     } catch (err) {
       console.error("Student registration error:", err);
-      // Fallback for seamless demo
-      saveStudentName(name.trim());
-      navigate({ to: "/dashboard" });
+      setError("Network error. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

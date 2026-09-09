@@ -4,7 +4,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from drf_spectacular.utils import extend_schema
 from apps.common.utils.response import success_response, error_response
-from apps.common.throttling import LoginRateThrottle
+from apps.common.throttling import LoginRateThrottle, FailedLoginThrottle
 from apps.accounts.serializers.student_auth_serializer import (
     StudentSignupSerializer,
     StudentLoginSerializer,
@@ -38,7 +38,7 @@ class StudentSignupView(APIView):
 
 class StudentLoginView(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = [LoginRateThrottle]
+    throttle_classes = [LoginRateThrottle, FailedLoginThrottle]
 
     @extend_schema(request=StudentLoginSerializer)
     def post(self, request):

@@ -20,9 +20,19 @@ class LeaderboardAPITests(TestCase):
             duration_minutes=60,
             status=Event.StatusChoices.LIVE,
         )
-        self.p1 = Participant.objects.create(event=self.event, name="Student One", email="p1@cbit.ac.in", score=300)
-        self.p2 = Participant.objects.create(event=self.event, name="Student Two", email="p2@cbit.ac.in", score=500)
-        self.p3 = Participant.objects.create(event=self.event, name="Student Three", email="p3@cbit.ac.in", score=400)
+        self.p1 = Participant.objects.create(
+            event=self.event, name="Student One", email="p1@cbit.ac.in", score=600, completed=5,
+        )
+        self.p2 = Participant.objects.create(
+            event=self.event, name="Student Two", email="p2@cbit.ac.in", score=900, completed=5,
+        )
+        self.p3 = Participant.objects.create(
+            event=self.event, name="Student Three", email="p3@cbit.ac.in", score=700, completed=5,
+        )
+        # Unpassed participant — must never appear in rankings
+        self.p4 = Participant.objects.create(
+            event=self.event, name="Student Four", email="p4@cbit.ac.in", score=0, completed=0,
+        )
 
         self.token2 = SessionService.generate_participant_token(self.p2)
         self.list_url = reverse("leaderboard-list")
@@ -35,9 +45,11 @@ class LeaderboardAPITests(TestCase):
 
         rankings = response.data["data"]["rankings"]
         self.assertEqual(len(rankings), 3)
-        self.assertEqual(rankings[0]["name"], "Student Two")  # 500 score -> Rank 1
-        self.assertEqual(rankings[1]["name"], "Student Three")  # 400 score -> Rank 2
-        self.assertEqual(rankings[2]["name"], "Student One")  # 300 score -> Rank 3
+        self.assertEqual(rankings[0]["name"], "Student Two")  # 900 score -> Rank 1
+        self.assertEqual(rankings[1]["name"], "Student Three")  # 700 score -> Rank 2
+        self.assertEqual(rankings[2]["name"], "Student One")  # 600 score -> Rank 3
+        self.assertNotEqual(rankings[0]["name"], "Student Four")
+        self.assertNotIn("Student Four", [r["name"] for r in rankings])
 
     def test_current_event_leaderboard_for_student(self):
         self.client.credentials(HTTP_X_PARTICIPANT_TOKEN=self.token2)

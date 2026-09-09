@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Lock, Laptop, GraduationCap, Users, Linkedin, Instagram, Youtube } from "lucide-react";
+import { Lock, Laptop, GraduationCap, Users, Linkedin, Instagram, Send } from "lucide-react";
 
 import { Navbar } from "@/components/Navbar";
 
@@ -136,14 +136,14 @@ function AboutPage() {
             <footer className="border-t border-border">
                 <div className="mx-auto flex max-w-7xl flex-col items-center justify-center gap-4 px-6 py-10 text-center">
                     <div className="flex items-center gap-4 text-muted-foreground">
-                        <a href="#" aria-label="LinkedIn" className="transition-colors hover:text-primary">
+                        <a href="https://www.linkedin.com/company/blueteamers/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="transition-colors hover:text-primary">
                             <Linkedin className="h-5 w-5" />
                         </a>
-                        <a href="#" aria-label="Instagram" className="transition-colors hover:text-primary">
+                        <a href="https://www.instagram.com/blueteamers_/" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="transition-colors hover:text-primary">
                             <Instagram className="h-5 w-5" />
                         </a>
-                        <a href="#" aria-label="YouTube" className="transition-colors hover:text-primary">
-                            <Youtube className="h-5 w-5" />
+                        <a href="https://t.me/BlueTeamers" target="_blank" rel="noopener noreferrer" aria-label="Telegram" className="transition-colors hover:text-primary">
+                            <Send className="h-5 w-5" />
                         </a>
                     </div>
                     <div className="text-xs text-muted-foreground/70">

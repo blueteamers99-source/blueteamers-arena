@@ -1,14 +1,15 @@
 from rest_framework import serializers
 from apps.accounts.models.user import User
+from apps.common.utils.validators import validate_name
 
 
 class StudentSignupSerializer(serializers.Serializer):
-    full_name = serializers.CharField(max_length=255)
+    full_name = serializers.CharField(max_length=255, validators=[validate_name])
     username = serializers.CharField(max_length=150)
     email = serializers.EmailField()
     password = serializers.CharField(min_length=8, write_only=True)
     confirm_password = serializers.CharField(min_length=8, write_only=True)
-    college = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+    college = serializers.CharField(max_length=255, required=False, allow_blank=True, default="", validators=[validate_name])
     department = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
     phone_number = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
 

@@ -71,12 +71,27 @@ class ParticipantTokenAuthentication(BaseAuthentication):
         # 2. Try JWT token (with participant_id claim)
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+
+            # Reject refresh tokens — only access tokens are valid for API access.
+            # SimpleJWT sets token_type="refresh" in refresh tokens.
+            if payload.get("token_type") == "refresh":
+                raise AuthenticationFailed(
+                    "Refresh tokens cannot be used for API access."
+                )
+
             p_id = payload.get("participant_id")
             if p_id:
                 participant = Participant.objects.select_related("event").filter(id=p_id).first()
                 if participant:
+                    # Reject if event is not Live — prevents access after event ends.
+                    if participant.event and participant.event.status != "Live":
+                        raise AuthenticationFailed(
+                            "This event is no longer active."
+                        )
                     request.participant = participant
                     return (ParticipantUserWrapper(participant), token)
+        except AuthenticationFailed:
+            raise
         except Exception:
             pass
 

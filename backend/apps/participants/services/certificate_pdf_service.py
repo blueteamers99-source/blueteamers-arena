@@ -1,4 +1,6 @@
 import io
+from django.conf import settings
+from django.utils import timezone
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
@@ -16,11 +18,14 @@ class CertificatePDFService:
         score: int,
         rank: int,
         certificate_id: str,
-        issued_date: str = "August 2026",
+        issued_date: str = "",
     ) -> bytes:
         """
         Generates a 300 DPI A4 Landscape High-Resolution Vector PDF Certificate.
         """
+        if not issued_date:
+            issued_date = timezone.now().strftime("%B %Y")
+
         buffer = io.BytesIO()
         # A4 Landscape: width = 841.89, height = 595.27
         w, h = landscape(A4)
@@ -88,7 +93,8 @@ class CertificatePDFService:
         c.drawRightString(w / 2 + 140, h - 295, f"EVENT RANK: #{rank}")
 
         # 6. Verification ID & QR Code
-        verify_url = f"http://localhost:8080/verify/{certificate_id}"
+        frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+        verify_url = f"{frontend_url}/verify?id={certificate_id}"
         qr_code = qr.QrCodeWidget(verify_url)
         bounds = qr_code.getBounds()
         qr_w = bounds[2] - bounds[0]

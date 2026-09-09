@@ -35,10 +35,10 @@ class PasswordService:
         token_str = secrets.token_urlsafe(32)
         reset_token = PasswordResetToken.objects.create(
             user=user,
-            token=token_str,
+            token=PasswordResetToken.hash_token(token_str),
         )
 
-        reset_url = f"{settings.CORS_ALLOWED_ORIGINS[0]}/admin/reset-password?token={reset_token.token}"
+        reset_url = f"{settings.CORS_ALLOWED_ORIGINS[0]}/admin/reset-password?token={token_str}"
         
         subject = "Blueteamers Arena — Password Reset Instructions"
         message = (

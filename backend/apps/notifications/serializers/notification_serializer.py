@@ -11,12 +11,10 @@ class NotificationSerializer(serializers.ModelSerializer):
             "message",
             "notification_type",
             "priority",
-            "is_read",
-            "read_at",
             "action_url",
             "created_at",
         ]
-        read_only_fields = ["id", "created_at", "read_at"]
+        read_only_fields = ["id", "created_at"]
 
 
 class BroadcastNotificationSerializer(serializers.Serializer):

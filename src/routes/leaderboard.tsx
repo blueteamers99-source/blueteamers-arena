@@ -23,6 +23,7 @@ import {
 
 import { Navbar } from "@/components/Navbar";
 import { API_BASE_URL } from "@/lib/config";
+import { studentAuthFetch } from "@/lib/auth";
 
 export const Route = createFileRoute("/leaderboard")({
   component: ArenaCommandCenter,
@@ -48,19 +49,52 @@ function ArenaCommandCenter() {
 
   const fetchLeaderboardData = () => {
     setIsRefreshing(true);
-    const token = typeof localStorage !== "undefined" ? localStorage.getItem("student_access_token") : null;
-    const userEmail = typeof localStorage !== "undefined" ? localStorage.getItem("user_email") : null;
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const eventCode =
+      typeof sessionStorage !== "undefined"
+        ? sessionStorage.getItem("arena.selectedEventCode")
+        : null;
 
-    const url = userEmail ? `${API_BASE_URL}/leaderboard/?email=${encodeURIComponent(userEmail)}` : `${API_BASE_URL}/leaderboard/`;
+    // The backend requires an event identifier (H-03 fix): pass the event the
+    // user is in, or fall back to the authenticated participant's own event.
+    // If the stored event code is stale/mismatched the backend 404s — we retry
+    // with /leaderboard/current/ below so standings always reflect the
+    // participant's own event (kept in sync with the dashboard).
+    let url =
+      eventCode && eventCode !== "global"
+        ? `${API_BASE_URL}/leaderboard/?event_code=${encodeURIComponent(eventCode)}`
+        : `${API_BASE_URL}/leaderboard/current/`;
 
-    fetch(url, { headers })
-      .then((res) => res.json())
+    const parseList = (resData: any): any[] => {
+      const data = resData?.data || resData;
+      return Array.isArray(data?.rankings)
+        ? data.rankings
+        : Array.isArray(data?.leaderboard)
+          ? data.leaderboard
+          : Array.isArray(data?.results)
+            ? data.results
+            : Array.isArray(data)
+              ? data
+              : [];
+    };
+
+    studentAuthFetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error("Leaderboard request failed");
+        return res.json();
+      })
       .then((resData) => {
-        const list = resData.data?.rankings || resData.rankings || resData.data?.leaderboard || resData.leaderboard || resData.results || (Array.isArray(resData.data) ? resData.data : Array.isArray(resData) ? resData : []);
-        if (Array.isArray(list)) {
+        const list = parseList(resData);
+        if (list.length > 0) {
           setLeaderboardItems(list);
+        } else if (url !== `${API_BASE_URL}/leaderboard/current/`) {
+          // Event-scoped query returned nothing usable — retry with the
+          // authenticated participant's own event.
+          url = `${API_BASE_URL}/leaderboard/current/`;
+          return studentAuthFetch(url)
+            .then((retryRes) => (retryRes.ok ? retryRes.json() : null))
+            .then((retryData) => {
+              if (retryData) setLeaderboardItems(parseList(retryData));
+            });
         }
       })
       .catch((err) => console.error("Error fetching command center data:", err))
@@ -83,7 +117,7 @@ function ArenaCommandCenter() {
   const activeParticipants = Math.round(totalParticipants * 0.58) || 281;
   const completedParticipants = leaderboardItems.filter((i) => (i.completed || 0) >= 5).length || 154;
   const avgScore = leaderboardItems.length ? Math.round(leaderboardItems.reduce((acc, i) => acc + (i.score || 0), 0) / leaderboardItems.length) : 370;
-  const certificatesGenerated = leaderboardItems.filter((i) => (i.score || 0) >= 300).length || 142;
+  const certificatesGenerated = leaderboardItems.filter((i) => (i.score || 0) >= 600).length || 142;
   const liveChallengesRunning = Math.round(activeParticipants * 0.13) || 37;
 
   // Filtered Leaderboard Items
@@ -238,13 +272,19 @@ function ArenaCommandCenter() {
                 </thead>
                 <tbody className="divide-y divide-border/40">
                   {filteredItems.map((item, idx) => {
-                    const rank = idx + 1;
+                    // Rank comes from the server (ordered by score, then finish
+                    // time) so it always matches the participant's actual score —
+                    // never re-derive it from filtered row position.
+                    const rank = typeof item.rank === "number" ? item.rank : null;
                     const completedCount = item.completed || 0;
                     const progressPct = Math.round((completedCount / 5) * 100);
-                    const isPassed = (item.score || 0) >= 300;
+                    const isPassed = (item.score || 0) >= 600;
 
                     return (
-                      <tr key={item.id || idx} className="hover:bg-primary/5 transition-colors">
+                      <tr
+                        key={item.participant_id || item.id || idx}
+                        className={`transition-colors ${item.is_current_user ? "bg-primary/10 border-l-2 border-primary" : "hover:bg-primary/5"}`}
+                      >
                         <td className="px-4 py-3.5 font-mono font-bold">
                           {rank === 1 ? (
                             <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400 font-bold border border-amber-500/40">🥇 1</span>
@@ -252,8 +292,10 @@ function ArenaCommandCenter() {
                             <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-400/20 text-slate-300 font-bold border border-slate-400/40">🥈 2</span>
                           ) : rank === 3 ? (
                             <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-amber-700/20 text-amber-500 font-bold border border-amber-700/40">🥉 3</span>
-                          ) : (
+                          ) : rank != null ? (
                             <span className="text-muted-foreground">#{rank}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
                           )}
                         </td>
                         <td className="px-4 py-3.5">
@@ -424,7 +466,7 @@ function ArenaCommandCenter() {
               <button onClick={() => setSelectedStudent(null)} className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
                 Close
               </button>
-              {(selectedStudent.score || 0) >= 300 && (
+              {(selectedStudent.score || 0) >= 600 && (
                 <a
                   href={`${API_BASE_URL}/certificate/download/CERT-BLUETEAM-${strId(selectedStudent.id)}/`}
                   target="_blank"

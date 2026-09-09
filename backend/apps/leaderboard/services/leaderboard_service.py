@@ -1,5 +1,6 @@
 from typing import Dict, Any, List, Optional
 from django.db.models import F
+from django.shortcuts import get_object_or_404
 from apps.events.models.event import Event
 from apps.participants.models.participant import Participant
 
@@ -15,19 +16,23 @@ class LeaderboardService:
     ) -> Dict[str, Any]:
         if not event:
             if event_id:
-                try:
-                    event = Event.objects.get(id=event_id)
-                except Event.DoesNotExist:
-                    pass
+                event = get_object_or_404(Event, id=event_id)
             elif event_code:
-                try:
-                    event = Event.objects.get(event_code__iexact=event_code.strip())
-                except Event.DoesNotExist:
-                    pass
+                event = get_object_or_404(Event, event_code__iexact=event_code.strip())
 
         qs = Participant.objects.all().select_related("event")
         if event:
             qs = qs.filter(event=event)
+
+        # Only participants who passed (score >= passing AND all challenges
+        # completed) are eligible for a rank. Unpassed participants are shown
+        # only in the full participant list, never ranked.
+        passing_score = event.passing_score if event else 0
+        total_challenges = event.total_challenges if event else 0
+        qs = qs.filter(
+            score__gte=passing_score,
+            completed__gte=total_challenges,
+        )
 
         if search_query:
             q = search_query.strip()

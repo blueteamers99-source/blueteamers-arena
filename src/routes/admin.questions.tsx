@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { AdminLayout } from "../components/admin/AdminLayout";
 import { API_BASE_URL } from "@/lib/config";
+import { authFetch } from "@/lib/auth";
 
 export const Route = createFileRoute("/admin/questions")({
   component: QuestionBank,
@@ -54,14 +55,6 @@ const CATEGORIES: ("All" | Category)[] = [
 
 const CATEGORY_FILTERS = CATEGORIES;
 
-function getAdminToken(): string {
-  if (typeof window === "undefined" || typeof localStorage === "undefined") return "";
-  return (
-    localStorage.getItem("admin_access_token") ||
-    localStorage.getItem("access_token") ||
-    ""
-  );
-}
 
 function QuestionBank() {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -87,17 +80,8 @@ function QuestionBank() {
   const [importSummary, setImportSummary] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
 
   const loadQuestions = () => {
-    const token = getAdminToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
-    fetch(`${API_BASE_URL}/admin/questions/`, { headers })
-      .then((res) => {
-        if (res.status === 401 && token) {
-          return fetch(`${API_BASE_URL}/admin/questions/`).then((r) => r.json());
-        }
-        return res.json();
-      })
+    authFetch(`${API_BASE_URL}/admin/questions/`)
+      .then((res) => res.json())
       .then((resData) => {
         const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
         if (Array.isArray(list)) {
@@ -134,7 +118,7 @@ function QuestionBank() {
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this question?")) {
-      fetch(`${API_BASE_URL}/admin/questions/${id}/`, { method: "DELETE" })
+      authFetch(`${API_BASE_URL}/admin/questions/${id}/`, { method: "DELETE" })
         .then(() => loadQuestions())
         .catch(() => loadQuestions());
     }
@@ -143,9 +127,8 @@ function QuestionBank() {
   const handleDuplicate = (id: string) => {
     const src = questions.find((q) => q.id === id);
     if (!src) return;
-    fetch(`${API_BASE_URL}/admin/questions/`, {
+    authFetch(`${API_BASE_URL}/admin/questions/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question_text: `${src.question} (Copy)`,
         category: src.category,
@@ -164,9 +147,8 @@ function QuestionBank() {
   };
 
   const handleAdd = (q: Question) => {
-    fetch(`${API_BASE_URL}/admin/questions/`, {
+    authFetch(`${API_BASE_URL}/admin/questions/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question_text: q.question,
         category: q.category,
@@ -185,9 +167,8 @@ function QuestionBank() {
   };
 
   const handleUpdate = (updated: Question) => {
-    fetch(`${API_BASE_URL}/admin/questions/${updated.id}/`, {
+    authFetch(`${API_BASE_URL}/admin/questions/${updated.id}/`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question_text: updated.question,
         category: updated.category,
@@ -221,7 +202,7 @@ function QuestionBank() {
     formData.append("file", file);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/questions/import/`, {
+      const res = await authFetch(`${API_BASE_URL}/admin/questions/import/`, {
         method: "POST",
         body: formData,
       });
@@ -294,16 +275,11 @@ function QuestionBank() {
     setCreatingChallenge(true);
     setChallengeMsg(null);
 
-    const token = getAdminToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
     const slug = challengeTitle.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
     try {
-      const res = await fetch(`${API_BASE_URL}/challenges/`, {
+      const res = await authFetch(`${API_BASE_URL}/challenges/`, {
         method: "POST",
-        headers,
         body: JSON.stringify({
           title: challengeTitle.trim(),
           name: challengeTitle.trim(),

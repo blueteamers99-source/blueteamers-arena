@@ -1,5 +1,6 @@
 from django.db import models
 from apps.common.models.base import BaseModel
+from apps.events.models.event import Event
 
 
 class Challenge(BaseModel):
@@ -19,6 +20,8 @@ class Challenge(BaseModel):
     difficulty = models.CharField(max_length=20, choices=DifficultyChoices.choices, default=DifficultyChoices.EASY)
     duration_minutes = models.PositiveIntegerField(default=20)
     points = models.PositiveIntegerField(default=100)
+    passing_percentage = models.PositiveIntegerField(default=60, help_text="Minimum percentage score to pass this challenge (0-100).")
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="challenges", null=True, blank=True)
     skills = models.JSONField(default=list, blank=True)
     objectives = models.JSONField(default=list, blank=True)
 

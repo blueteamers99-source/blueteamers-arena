@@ -66,8 +66,9 @@ class ProgressService:
         # Calculate server remaining time
         remaining_time = progress.calculate_remaining_time_seconds()
         if progress.status == ParticipantProgress.StatusChoices.IN_PROGRESS and remaining_time <= 0 and progress.started_at:
-            # Check if duration limit is strict
-            pass
+            # Enforce time limit: mark challenge as expired
+            progress.status = ParticipantProgress.StatusChoices.EXPIRED
+            progress.save()
 
         # Fetch draft answers from database
         drafts = ParticipantDraftAnswer.objects.filter(participant=participant, challenge=challenge)
@@ -250,7 +251,7 @@ class ProgressService:
                 "status": "completed",
                 "score_earned": progress.score_earned,
                 "max_possible_score": progress.max_possible_score,
-                "is_passing": progress.score_earned >= (progress.max_possible_score * 0.7),
+                "is_passing": progress.score_earned >= (progress.max_possible_score * (getattr(challenge, 'passing_percentage', 60) / 100)),
                 "total_participant_score": participant.score,
                 "completed_challenges": participant.completed,
             }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Shield, ArrowRight, Loader2 } from "lucide-react";
 import { setAdminAuth } from "@/lib/auth";
 import { API_BASE_URL } from "@/lib/config";
@@ -12,11 +13,13 @@ export function AdminPortalLogin({ onSuccess }: AdminPortalLoginProps) {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showStudentHint, setShowStudentHint] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setShowStudentHint(false);
 
     const loginInput = username.trim();
     if (!loginInput || !password) {
@@ -50,6 +53,15 @@ export function AdminPortalLogin({ onSuccess }: AdminPortalLoginProps) {
         } else {
           window.location.href = "/admin/dashboard";
         }
+      } else if (
+        res.status === 403 &&
+        typeof resData.message === "string" &&
+        resData.message.toLowerCase().includes("student portal")
+      ) {
+        // Backend role enforcement: valid credentials, but this account is a
+        // student. Offer the student entry point.
+        setShowStudentHint(true);
+        setError(resData.message);
       } else {
         setError(resData.message || "Invalid credentials.");
       }
@@ -76,6 +88,18 @@ export function AdminPortalLogin({ onSuccess }: AdminPortalLoginProps) {
           {error && (
             <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-400 text-center font-medium">
               {error}
+            </div>
+          )}
+
+          {showStudentHint && (
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-sky-500/10 border border-sky-500/20 p-3 text-xs font-medium text-sky-400">
+              <span>Student account detected.</span>
+              <Link
+                to="/arena"
+                className="shrink-0 rounded-md bg-sky-500/20 px-2.5 py-1 font-semibold text-sky-300 hover:bg-sky-500/30 transition-colors"
+              >
+                Go to Student Arena →
+              </Link>
             </div>
           )}
 

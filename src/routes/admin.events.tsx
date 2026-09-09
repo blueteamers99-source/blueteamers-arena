@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { AdminLayout } from "../components/admin/AdminLayout";
 import { API_BASE_URL } from "@/lib/config";
+import { authFetch } from "@/lib/auth";
 
 export const Route = createFileRoute("/admin/events")({
   component: AdminEvents,
@@ -68,14 +69,6 @@ function normalizeStatus(raw: string | undefined | null): EventStatus {
 
 const STATUS_FILTERS: ("All" | EventStatus)[] = ["All", "Live", "Upcoming", "Completed"];
 
-function getAdminToken(): string | null {
-  if (typeof localStorage === "undefined") return null;
-  return (
-    localStorage.getItem("admin_access_token") ||
-    localStorage.getItem("student_access_token") ||
-    localStorage.getItem("access_token")
-  );
-}
 
 function AdminEvents() {
   const [events, setEvents] = useState<EventRow[]>([]);
@@ -88,10 +81,6 @@ function AdminEvents() {
   const [editingEvent, setEditingEvent] = useState<EventRow | null>(null);
 
   const fetchEvents = () => {
-    const token = getAdminToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
     const processResponseData = (resData: any) => {
       let list: any[] = [];
       if (Array.isArray(resData)) {
@@ -115,8 +104,8 @@ function AdminEvents() {
           description: String(e.description || ""),
           learningOutcomes: String(e.learning_outcomes || e.learningOutcomes || ""),
           prerequisites: String(e.prerequisites || ""),
-          totalScore: Number(e.total_score || e.totalScore || 500),
-          passingScore: Number(e.passing_score || e.passingScore || 350),
+          totalScore: Number(e.total_score || e.totalScore || 1000),
+          passingScore: Number(e.passing_score || e.passingScore || 600),
           certificateAvailable: e.certificate_available ?? e.certificateAvailable ?? true,
         }))
       );
@@ -124,27 +113,13 @@ function AdminEvents() {
       setLoading(false);
     };
 
-    fetch(`${API_BASE_URL}/events/`, { headers })
-      .then(async (res) => {
-        if (!res.ok) {
-          const fallbackRes = await fetch(`${API_BASE_URL}/events/`);
-          if (!fallbackRes.ok) {
-            throw new Error(`HTTP ${fallbackRes.status}`);
-          }
-          return fallbackRes.json();
-        }
-        return res.json();
-      })
+    authFetch(`${API_BASE_URL}/events/`)
+      .then((res) => res.json())
       .then((data) => processResponseData(data))
-      .catch(() => {
-        fetch(`${API_BASE_URL}/events/`)
-          .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-          .then((data) => processResponseData(data))
-          .catch((finalErr) => {
-            setError("Failed to load events.");
-            setLoading(false);
-            console.error("[Events] fetch error:", finalErr);
-          });
+      .catch((err) => {
+        setError("Failed to load events.");
+        setLoading(false);
+        console.error("[Events] fetch error:", err);
       });
   };
 
@@ -169,13 +144,8 @@ function AdminEvents() {
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this event?")) {
-      const token = getAdminToken();
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
-      fetch(`${API_BASE_URL}/events/${id}/`, {
+      authFetch(`${API_BASE_URL}/events/${id}/`, {
         method: "DELETE",
-        headers,
       })
         .then(() => fetchEvents())
         .catch(() => fetchEvents());
@@ -186,13 +156,8 @@ function AdminEvents() {
     const src = events.find((e) => e.id === id);
     if (!src) return;
 
-    const token = getAdminToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
-    fetch(`${API_BASE_URL}/events/`, {
+    authFetch(`${API_BASE_URL}/events/`, {
       method: "POST",
-      headers,
       body: JSON.stringify({
         name: `${src.name} (Copy)`,
         college_name: src.college,
@@ -211,13 +176,8 @@ function AdminEvents() {
 
   const handleToggleStatus = (row: EventRow) => {
     const nextStatus = row.status === "Live" ? "Completed" : "Live";
-    const token = getAdminToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
-    fetch(`${API_BASE_URL}/events/${row.id}/`, {
+    authFetch(`${API_BASE_URL}/events/${row.id}/`, {
       method: "PATCH",
-      headers,
       body: JSON.stringify({ status: nextStatus }),
     })
       .then(() => fetchEvents())
@@ -239,18 +199,14 @@ function AdminEvents() {
     learningOutcomes?: string;
     prerequisites?: string;
   }) => {
-    const token = getAdminToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
     const body = {
       college_name: formData.college || "CBIT",
       workshop_name: formData.workshop || "SOC Cyber Defense",
       event_code: formData.code || `EVENT-${Date.now()}`,
       event_date: formData.date || new Date().toISOString().split("T")[0],
       duration_minutes: formData.duration || 60,
-      total_score: formData.totalScore || 500,
-      passing_score: formData.passingScore || 350,
+      total_score: formData.totalScore || 1000,
+      passing_score: formData.passingScore || 600,
       certificate_available: formData.certificateAvailable ?? true,
       total_challenges: formData.challenges || 5,
       status: formData.status || "Upcoming",
@@ -259,19 +215,11 @@ function AdminEvents() {
       prerequisites: formData.prerequisites || "",
     };
 
-    fetch(`${API_BASE_URL}/events/`, {
+    authFetch(`${API_BASE_URL}/events/`, {
       method: "POST",
-      headers,
       body: JSON.stringify(body),
     })
       .then((res) => {
-        if (res.status === 401 && token) {
-          return fetch(`${API_BASE_URL}/events/`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          }).then((r) => r.json());
-        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
@@ -285,10 +233,6 @@ function AdminEvents() {
   };
 
   const handleUpdate = (updated: EventRow) => {
-    const token = getAdminToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
     const body = {
       college_name: updated.college,
       workshop_name: updated.name,
@@ -296,16 +240,15 @@ function AdminEvents() {
       event_date: updated.date,
       status: updated.status,
       description: updated.description || "",
-      total_score: updated.totalScore || 500,
-      passing_score: updated.passingScore || 350,
+      total_score: updated.totalScore || 1000,
+      passing_score: updated.passingScore || 600,
       certificate_available: updated.certificateAvailable ?? true,
       learning_outcomes: updated.learningOutcomes || "",
       prerequisites: updated.prerequisites || "",
     };
 
-    fetch(`${API_BASE_URL}/events/${updated.id}/`, {
+    authFetch(`${API_BASE_URL}/events/${updated.id}/`, {
       method: "PUT",
-      headers,
       body: JSON.stringify(body),
     })
       .then(() => fetchEvents())
@@ -515,7 +458,7 @@ function ViewEventModal({ event, onClose }: { event: EventRow; onClose: () => vo
 
   const loadApprovedStudents = () => {
     setLoadingStudents(true);
-    fetch(`${API_BASE_URL}/events/${event.id}/approved-students/?search=${encodeURIComponent(studentSearch)}`)
+    authFetch(`${API_BASE_URL}/events/${event.id}/approved-students/?search=${encodeURIComponent(studentSearch)}`)
       .then((res) => res.json())
       .then((resData) => {
         if (resData && resData.success) {
@@ -547,7 +490,7 @@ function ViewEventModal({ event, onClose }: { event: EventRow; onClose: () => vo
     formData.append("file", csvFile);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/events/${event.id}/upload-students/`, {
+      const res = await authFetch(`${API_BASE_URL}/events/${event.id}/upload-students/`, {
         method: "POST",
         body: formData,
       });
@@ -570,7 +513,7 @@ function ViewEventModal({ event, onClose }: { event: EventRow; onClose: () => vo
   const handleDeleteStudent = async (studentId: string) => {
     if (!confirm("Are you sure you want to remove this approved student?")) return;
     try {
-      await fetch(`${API_BASE_URL}/events/${event.id}/approved-students/?student_id=${studentId}`, {
+      await authFetch(`${API_BASE_URL}/events/${event.id}/approved-students/?student_id=${studentId}`, {
         method: "DELETE",
       });
       loadApprovedStudents();
@@ -758,8 +701,8 @@ function EditEventModal({
   const [description, setDescription] = useState(event.description || "");
   const [learningOutcomes, setLearningOutcomes] = useState(event.learningOutcomes || "");
   const [prerequisites, setPrerequisites] = useState(event.prerequisites || "");
-  const [totalScore, setTotalScore] = useState(String(event.totalScore || 500));
-  const [passingScore, setPassingScore] = useState(String(event.passingScore || 350));
+  const [totalScore, setTotalScore] = useState(String(event.totalScore || 1000));
+  const [passingScore, setPassingScore] = useState(String(event.passingScore || 600));
   const [certificateAvailable, setCertificateAvailable] = useState<boolean>(event.certificateAvailable ?? true);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -774,8 +717,8 @@ function EditEventModal({
       description,
       learningOutcomes,
       prerequisites,
-      totalScore: Number(totalScore) || 500,
-      passingScore: Number(passingScore) || 350,
+      totalScore: Number(totalScore) || 1000,
+      passingScore: Number(passingScore) || 600,
       certificateAvailable,
     });
   };
@@ -934,8 +877,8 @@ function CreateEventModal({
   const [status, setStatus] = useState<EventStatus>("Upcoming");
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState("60");
-  const [totalScore, setTotalScore] = useState("500");
-  const [passingScore, setPassingScore] = useState("350");
+  const [totalScore, setTotalScore] = useState("1000");
+  const [passingScore, setPassingScore] = useState("600");
   const [certificateAvailable, setCertificateAvailable] = useState<boolean>(true);
   const [challenges, setChallenges] = useState("5");
   const [code, setCode] = useState("");
@@ -953,8 +896,8 @@ function CreateEventModal({
       status,
       description,
       duration: Number(duration) || 60,
-      totalScore: Number(totalScore) || 500,
-      passingScore: Number(passingScore) || 350,
+      totalScore: Number(totalScore) || 1000,
+      passingScore: Number(passingScore) || 600,
       certificateAvailable,
       challenges: Number(challenges) || 5,
       learningOutcomes,
@@ -1015,10 +958,10 @@ function CreateEventModal({
             <input required type="number" min={10} value={duration} onChange={(e) => setDuration(e.target.value)} className={inputCls} />
           </Field>
           <Field label="Total Test Score">
-            <input required type="number" min={0} value={totalScore} onChange={(e) => setTotalScore(e.target.value)} className={inputCls} placeholder="e.g. 500" />
+            <input required type="number" min={0} value={totalScore} onChange={(e) => setTotalScore(e.target.value)} className={inputCls} placeholder="e.g. 1000" />
           </Field>
           <Field label="Passing Score">
-            <input required type="number" min={0} value={passingScore} onChange={(e) => setPassingScore(e.target.value)} className={inputCls} placeholder="e.g. 350" />
+            <input required type="number" min={0} value={passingScore} onChange={(e) => setPassingScore(e.target.value)} className={inputCls} placeholder="e.g. 600" />
           </Field>
           <Field label="Certificate Available">
             <select

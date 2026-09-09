@@ -1,6 +1,6 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema
 from apps.common.utils.response import success_response
 from apps.accounts.permissions.is_admin import IsAdmin
@@ -13,7 +13,7 @@ from apps.notifications.serializers.notification_serializer import (
 
 
 class NotificationViewSet(viewsets.ViewSet):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get_user(self, request):
         return request.user if request.user and request.user.is_authenticated else None
@@ -21,8 +21,7 @@ class NotificationViewSet(viewsets.ViewSet):
     @extend_schema(responses={200: NotificationSerializer(many=True)})
     def list(self, request):
         user = self.get_user(request)
-        unread_only = request.query_params.get("unread", "false").lower() == "true"
-        notifications = NotificationService.get_user_notifications(user, unread_only=unread_only)
+        notifications = NotificationService.get_user_notifications(user)
         serializer = NotificationSerializer(notifications, many=True)
         return success_response(
             data={

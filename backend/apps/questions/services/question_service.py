@@ -18,7 +18,7 @@ class QuestionService:
             evidence_text=data.get("evidence_text", ""),
             options_json=data.get("options_json", []),
             correct_answer=data.get("correct_answer", ""),
-            correct_option_index=data.get("correct_option_index", 0),
+            correct_option_index=data.get("correct_option_index"),
             explanation=data.get("explanation", ""),
             default_points=data.get("default_points", 10),
             status=data.get("status", Question.StatusChoices.PUBLISHED),

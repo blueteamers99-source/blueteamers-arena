@@ -4,6 +4,9 @@ import { Lock, ArrowRight, CheckCircle, Loader2 } from "lucide-react";
 import { API_BASE_URL } from "@/lib/config";
 
 export const Route = createFileRoute("/reset-password")({
+  validateSearch: (search: Record<string, unknown>): { token?: string } => ({
+    token: (search.token as string) || undefined,
+  }),
   component: StudentResetPassword,
   head: () => ({
     meta: [{ title: "Reset Password — Blueteamers Arena" }],
@@ -12,25 +15,41 @@ export const Route = createFileRoute("/reset-password")({
 
 function StudentResetPassword() {
   const navigate = useNavigate();
+  const searchParams = Route.useSearch();
+  const token = searchParams.token;
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword !== confirmPassword) return;
+    setError(null);
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    if (!token) {
+      setError("Invalid or missing reset token. Please request a new password reset link.");
+      return;
+    }
     setLoading(true);
 
     try {
-      await fetch(`${API_BASE_URL}/auth/reset-password/`, {
+      const res = await fetch(`${API_BASE_URL}/auth/reset-password/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ new_password: newPassword }),
+        body: JSON.stringify({ token, new_password: newPassword }),
       });
-      setSuccess(true);
+      const data = await res.json();
+      if (res.ok && data.success !== false) {
+        setSuccess(true);
+      } else {
+        setError(data.message || "Failed to reset password. The token may be invalid or expired.");
+      }
     } catch {
-      setSuccess(true);
+      setError("Unable to connect to authentication service. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -63,6 +82,11 @@ function StudentResetPassword() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-400 text-center font-medium">
+                  {error}
+                </div>
+              )}
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">New Password</label>
                 <div className="relative mt-1.5">

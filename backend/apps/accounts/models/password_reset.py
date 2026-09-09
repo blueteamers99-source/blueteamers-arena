@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from datetime import timedelta
 from django.db import models
@@ -23,6 +24,15 @@ class PasswordResetToken(BaseModel):
             models.Index(fields=["token"]),
             models.Index(fields=["expires_at"]),
         ]
+
+    @staticmethod
+    def hash_token(token: str) -> str:
+        """SHA-256 digest of a password-reset token. The token is high-entropy
+        random data (not a memorable password), so a fast hash is appropriate
+        and keeps the stored value unusable even if the database is
+        compromised. Only the digest is ever persisted; the raw token is sent
+        to the user's email."""
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
     def save(self, *args, **kwargs):
         if not self.expires_at:

@@ -44,8 +44,6 @@ class Notification(BaseModel):
         default=PriorityChoices.NORMAL,
         db_index=True,
     )
-    is_read = models.BooleanField(default=False, db_index=True)
-    read_at = models.DateTimeField(null=True, blank=True)
     action_url = models.CharField(max_length=500, blank=True, default="")
 
     class Meta:
@@ -53,9 +51,7 @@ class Notification(BaseModel):
         verbose_name_plural = "Notifications"
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["recipient", "is_read"]),
             models.Index(fields=["notification_type", "created_at"]),
-            models.Index(fields=["is_read", "created_at"]),
         ]
 
     def __str__(self):

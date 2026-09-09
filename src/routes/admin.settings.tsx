@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { AdminLayout } from "../components/admin/AdminLayout";
 import { API_BASE_URL } from "@/lib/config";
+import { authFetch } from "@/lib/auth";
 
 export const Route = createFileRoute("/admin/settings")({
   component: AdminSettings,
@@ -45,7 +46,7 @@ function AdminSettings() {
   const [systemStatus, setSystemStatus] = useState("Checking...");
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/admin/dashboard/`)
+    authFetch(`${API_BASE_URL}/admin/dashboard/`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success || data.data) {
@@ -69,9 +70,8 @@ function AdminSettings() {
       setPasswordMsg("New passwords do not match!");
       return;
     }
-    fetch(`${API_BASE_URL}/auth/change-password/`, {
+    authFetch(`${API_BASE_URL}/auth/change-password/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
     })
       .then(() => {

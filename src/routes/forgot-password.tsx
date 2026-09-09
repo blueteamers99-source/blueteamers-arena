@@ -37,7 +37,7 @@ function ForgotPassword() {
         setErrorMsg(data.message || "Failed to process password reset request.");
       }
     } catch {
-      setSentSuccess(true);
+      setErrorMsg("Network error. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

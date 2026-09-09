@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./config";
+import { studentAuthFetch, getStudentUser } from "./auth";
 
 export type Difficulty = "Easy" | "Medium" | "Hard";
 export type ChallengeStatus = "not_started" | "in_progress" | "completed";
@@ -16,7 +17,7 @@ export type Challenge = {
   objectives: string[];
   brief: string;
   resources: { name: string; type: string; size: string; evidenceId?: string }[];
-  evidence?: { id: string; label: string; filename: string; image: string }[];
+  evidence?: { id: string; label: string; filename: string; image: string; content_text?: string | null; file_format?: string }[];
   questions: {
     id: string;
     prompt: string;
@@ -55,8 +56,7 @@ export const CHALLENGES: Challenge[] = [
     ],
     questions: [
       { id: "q1", prompt: "What is the spoofed sender domain?", kind: "text" },
-      { id: "q2", prompt: "Identify the suspicious URL.", kind: "text" },
-      { id: "q3", prompt: "List three phishing indicators found in this email.", kind: "text" },
+      { id: "q2", prompt: "List three phishing indicators found in this email.", kind: "text" },
     ],
 
   },
@@ -209,13 +209,40 @@ export const CHALLENGES: Challenge[] = [
 
 const PROGRESS_KEY = "arena.challengeProgress";
 const ACTIVE_KEY = "arena.activeChallengeId";
+const SCORES_KEY = "arena.challengeScores";
+
+// Storage keys are scoped per logged-in user so that a newly registered
+// user never inherits a previous account's challenge progress left in
+// sessionStorage (bug: new users saw quizzes already "completed").
+function scopedKey(base: string): string {
+  const user = getStudentUser();
+  return user?.id ? `${base}:${user.id}` : `${base}:anon`;
+}
+
+export type ChallengeScore = { score_earned: number; max_possible_score: number };
+
+export function getChallengeScores(): Record<string, ChallengeScore> {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(sessionStorage.getItem(scopedKey(SCORES_KEY)) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+export function setChallengeScore(id: string, score_earned: number, max_possible_score: number) {
+  if (typeof window === "undefined") return;
+  const scores = getChallengeScores();
+  scores[id] = { score_earned, max_possible_score };
+  sessionStorage.setItem(scopedKey(SCORES_KEY), JSON.stringify(scores));
+}
 
 export type ProgressMap = Record<string, ChallengeStatus>;
 
 export function getProgress(): ProgressMap {
   if (typeof window === "undefined") return {};
   try {
-    return JSON.parse(sessionStorage.getItem(PROGRESS_KEY) || "{}");
+    return JSON.parse(sessionStorage.getItem(scopedKey(PROGRESS_KEY)) || "{}");
   } catch {
     return {};
   }
@@ -225,21 +252,37 @@ export function setStatus(id: string, status: ChallengeStatus) {
   if (typeof window === "undefined") return;
   const p = getProgress();
   p[id] = status;
-  sessionStorage.setItem(PROGRESS_KEY, JSON.stringify(p));
+  sessionStorage.setItem(scopedKey(PROGRESS_KEY), JSON.stringify(p));
+}
+
+export function setProgressMap(map: ProgressMap) {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(scopedKey(PROGRESS_KEY), JSON.stringify(map));
 }
 
 export function setActive(id: string) {
-  if (typeof window !== "undefined") sessionStorage.setItem(ACTIVE_KEY, id);
+  if (typeof window !== "undefined") sessionStorage.setItem(scopedKey(ACTIVE_KEY), id);
 }
 
 export function getActive(): string | null {
   if (typeof window === "undefined") return null;
-  return sessionStorage.getItem(ACTIVE_KEY);
+  return sessionStorage.getItem(scopedKey(ACTIVE_KEY));
 }
 
 export function computeScore(progress: ProgressMap): number {
+  // Use the server-graded earned score (authoritative) instead of blindly
+  // awarding full challenge points. Fixes the bug where submitting with no
+  // answers still showed the full 100/100 for the challenge.
+  const scores = getChallengeScores();
   return CHALLENGES.filter((c) => progress[c.id] === "completed").reduce(
-    (sum, c) => sum + c.points,
+    (sum, c) => {
+      const rec = scores[c.id];
+      // No server-graded record → count 0 points. Never inflate to full
+      // challenge points: the score shown here must match the server's
+      // accumulated participant.score (the same value printed on the
+      // certificate), otherwise dashboard and certificate disagree.
+      return sum + (rec && typeof rec.score_earned === "number" ? rec.score_earned : 0);
+    },
     0,
   );
 }
@@ -286,32 +329,22 @@ export interface ChallengeProgressState {
   completed_at?: string | null;
 }
 
-export async function fetchAllProgressApi(): Promise<Record<string, { status: ChallengeStatus; score_earned?: number; answered_questions?: number; remaining_time_seconds?: number }>> {
+export type ServerProgressEntry = { status: ChallengeStatus; score_earned?: number; answered_questions?: number; remaining_time_seconds?: number };
+
+export async function fetchAllProgressApi(): Promise<Record<string, ServerProgressEntry> | null> {
   try {
-    const token = getAuthToken();
-    const res = await fetch(`${API_BASE_URL}/progress/`, {
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-    if (!res.ok) return {};
+    const res = await studentAuthFetch(`${API_BASE_URL}/progress/`);
+    if (!res.ok) return null;
     const json = await res.json();
     return json.data || {};
   } catch {
-    return {};
+    return null;
   }
 }
 
 export async function fetchProgressApi(id: string): Promise<ChallengeProgressState | null> {
   try {
-    const token = getAuthToken();
-    const res = await fetch(`${API_BASE_URL}/challenges/${id}/progress/`, {
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
+    const res = await studentAuthFetch(`${API_BASE_URL}/challenges/${id}/progress/`);
     if (!res.ok) return null;
     const json = await res.json();
     return json.data || json;
@@ -322,13 +355,7 @@ export async function fetchProgressApi(id: string): Promise<ChallengeProgressSta
 
 export async function fetchChallengesApi(): Promise<Challenge[]> {
   try {
-    const token = getAuthToken();
-    const res = await fetch(`${API_BASE_URL}/challenges/`, {
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
+    const res = await studentAuthFetch(`${API_BASE_URL}/challenges/`);
     if (!res.ok) return CHALLENGES;
     const json = await res.json();
     const list = json.results || json.data || json;
@@ -361,13 +388,7 @@ export async function fetchChallengesApi(): Promise<Challenge[]> {
 
 export async function fetchChallengeDetailApi(id: string): Promise<Challenge | null> {
   try {
-    const token = getAuthToken();
-    const res = await fetch(`${API_BASE_URL}/challenges/${id}/`, {
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
+    const res = await studentAuthFetch(`${API_BASE_URL}/challenges/${id}/`);
     if (!res.ok) return CHALLENGES.find((c) => c.id === id) || null;
     const json = await res.json();
     const item = json.challenge || json.data || json;
@@ -397,20 +418,20 @@ export async function fetchChallengeDetailApi(id: string): Promise<Challenge | n
 }
 
 export async function startChallengeApi(id: string): Promise<ChallengeProgressState | null> {
-  setActive(id);
-  setStatus(id, "in_progress");
   try {
-    const token = getAuthToken();
-    const res = await fetch(`${API_BASE_URL}/challenges/${id}/start/`, {
+    const res = await studentAuthFetch(`${API_BASE_URL}/challenges/${id}/start/`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
     });
     if (res.ok) {
       const json = await res.json();
+      // Only update local state after server confirms success
+      setActive(id);
+      setStatus(id, "in_progress");
       return json.data || json;
+    }
+    if (res.status === 403) {
+      // Challenge is locked — do not update local state
+      return null;
     }
   } catch {
     // silent
@@ -425,13 +446,8 @@ export async function saveProgressApi(
   visitedQuestions: string[] = []
 ): Promise<boolean> {
   try {
-    const token = getAuthToken();
-    const res = await fetch(`${API_BASE_URL}/challenges/${id}/save-progress/`, {
+    const res = await studentAuthFetch(`${API_BASE_URL}/challenges/${id}/save-progress/`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
       body: JSON.stringify({
         answers,
         current_question_index: currentQuestionIndex,
@@ -445,23 +461,44 @@ export async function saveProgressApi(
 }
 
 export async function submitChallengeApi(id: string, answers: Record<string, string>): Promise<any> {
-  setStatus(id, "completed");
   try {
-    const token = getAuthToken();
-    const res = await fetch(`${API_BASE_URL}/challenges/${id}/submit/`, {
+    const res = await studentAuthFetch(`${API_BASE_URL}/challenges/${id}/submit/`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
       body: JSON.stringify({ answers }),
     });
     if (res.ok) {
-      return await res.json();
+      const json = await res.json();
+      // Persist the server-graded earned score so the dashboard/leaderboard
+      // display the real score instead of the challenge's max points.
+      const payload = json?.data || json || {};
+      const earned = typeof payload.score_earned === "number" ? payload.score_earned : 0;
+      const maxPossible = typeof payload.max_possible_score === "number" ? payload.max_possible_score : 0;
+      setChallengeScore(id, earned, maxPossible);
+      // Only mark completed after server confirms success
+      setStatus(id, "completed");
+      return json;
     }
-  } catch {
-    // silent
+    if (!res.ok) {
+      let message = `Submission failed (status ${res.status}). Please try again.`;
+      try {
+        const body = await res.json();
+        if (body?.message) message = body.message;
+      } catch {
+        // ignore non-JSON error bodies
+      }
+      if (res.status === 403) {
+        return { success: false, message: "Challenge is locked. Complete the previous challenge first." };
+      }
+      return { success: false, message };
+    }
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error
+        ? `Submission failed: ${err.message}`
+        : "Submission failed. Please try again.",
+    };
   }
-  return { success: true };
+  return { success: false, message: "Submission failed. Please try again." };
 }
 

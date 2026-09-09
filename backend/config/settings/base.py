@@ -19,6 +19,15 @@ env = environ.Env(
 environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
 SECRET_KEY = env("SECRET_KEY")
+
+# Fail in production if SECRET_KEY is the insecure default
+if SECRET_KEY.startswith("django-insecure"):
+    import warnings
+    warnings.warn(
+        "SECRET_KEY is using an insecure default value. "
+        "Set the SECRET_KEY environment variable in production!",
+        stacklevel=2,
+    )
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["127.0.0.1", "localhost", "0.0.0.0", "testserver"])
 
@@ -142,10 +151,13 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
-        "anon": "10000/hour",
-        "user": "10000/hour",
+        "anon": "200/minute",
+        "user": "600/minute",
         "login": "20/minute",
+        "admin_login": "9/minute",
+        "failed_login": "10/hour",
         "verify_code": "30/minute",
+        "submission": "30/minute",
     },
 }
 
@@ -184,9 +196,20 @@ SPECTACULAR_SETTINGS = {
     "COMPONENT_SPLIT_REQUEST": True,
 }
 
+# Frontend URL for certificate QR codes and emails
+FRONTEND_URL = env.str("FRONTEND_URL", default="https://blueteamers-arena.vercel.app")
+
 # CORS Settings
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://localhost:8080",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:8080",
+])
 
 # Logging Configuration
 LOGGING = {

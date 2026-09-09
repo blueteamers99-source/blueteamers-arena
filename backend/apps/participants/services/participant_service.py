@@ -1,4 +1,5 @@
 from typing import Dict, Any
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError, NotFound
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -34,6 +35,26 @@ class ParticipantService:
         if not email:
             raise ValidationError({"email": ["College email ID is required."]})
 
+        # Rule 0: Event Status Check — only LIVE events accept registrations
+        if event.status != Event.StatusChoices.LIVE:
+            raise ValidationError({
+                "detail": "This event is not currently accepting registrations.",
+                "message": "This event is not currently accepting registrations."
+            })
+
+        # Rule 0b: Registration Window — open_at and close_at checks
+        now = timezone.now()
+        if event.registration_open_at and now < event.registration_open_at:
+            raise ValidationError({
+                "detail": "Event registration has not opened yet.",
+                "message": "Event registration has not opened yet."
+            })
+        if event.registration_close_at and now > event.registration_close_at:
+            raise ValidationError({
+                "detail": "Event registration has expired.",
+                "message": "Event registration has expired."
+            })
+
         # Rule 1: Approved Student PostgreSQL Check
         approved_students_count = ApprovedStudent.objects.filter(event=event).count()
         if approved_students_count > 0:
@@ -51,16 +72,21 @@ class ParticipantService:
                 )
 
         # Rule 2: Duplicate Joined Protection
-        existing_participant = Participant.objects.filter(event=event, email__iexact=email).first()
-        if existing_participant:
-            # For repeat access, return existing participant safely
-            return existing_participant
-
-        participant = Participant.objects.create(
-            event=event,
-            email=email,
-            name=name,
-            started_at=timezone.now(),
-        )
-
-        return participant
+        # Use get_or_create for atomicity — prevents race condition when
+        # two tabs register the same email simultaneously (check-then-create → 500).
+        # The DB unique_together(event, email) is the backstop; if two concurrent
+        # inserts both pass the app-level lookup, the loser re-fetches the winner.
+        try:
+            with transaction.atomic():
+                participant, created = Participant.objects.get_or_create(
+                    event=event,
+                    email=email,
+                    defaults={
+                        'name': name,
+                        'started_at': timezone.now(),
+                    },
+                )
+                return participant
+        except IntegrityError:
+            # True simultaneous insert: another request created the row first.
+            return Participant.objects.get(event=event, email__iexact=email)

@@ -47,8 +47,8 @@ export const DEFAULT_EVENT_DETAILS = {
   status: "Open" as const,
   difficulty: "Intermediate" as const,
   maxStudents: 250,
-  totalScore: 500,
-  passingScore: 350,
+  totalScore: 1000,
+  passingScore: 600,
   certificateAvailable: true,
   learningOutcomes: [
     "Email Security & Phishing Detection",

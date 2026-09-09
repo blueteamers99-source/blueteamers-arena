@@ -1,6 +1,5 @@
-import urllib.parse
 import jwt
-from typing import Tuple, Optional, Any
+from typing import Tuple, Optional
 from django.conf import settings
 from apps.accounts.models.user import User
 from apps.participants.models.participant import Participant
@@ -9,24 +8,17 @@ from apps.participants.models.participant import Participant
 def resolve_ws_auth(scope: dict) -> Tuple[Optional[User], Optional[Participant]]:
     """
     Extracts and verifies JWT token from WebSocket connection scope.
-    Supports query parameter `?token=<jwt>` or `Authorization` header.
+    Supports `Authorization` header only.
     Returns (user, participant).
     """
-    # 1. Check query string: ?token=...
-    query_string = scope.get("query_string", b"").decode("utf-8")
-    query_params = urllib.parse.parse_qs(query_string)
+    # Check headers: Authorization: Bearer <token>
+    headers = dict(scope.get("headers", []))
+    auth_header = headers.get(b"authorization", b"").decode("utf-8")
     token = None
-    if "token" in query_params:
-        token = query_params["token"][0]
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
 
-    # 2. Check headers: Authorization: Bearer <token>
-    if not token:
-        headers = dict(scope.get("headers", []))
-        auth_header = headers.get(b"authorization", b"").decode("utf-8")
-        if auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
-
-    # 3. Check existing scope user
+    # Check existing scope user
     scope_user = scope.get("user")
     if scope_user and scope_user.is_authenticated:
         participant = getattr(scope_user, "participant", None)
@@ -35,6 +27,25 @@ def resolve_ws_auth(scope: dict) -> Tuple[Optional[User], Optional[Participant]]
     if not token:
         return None, None
 
+    return _decode_token(token)
+
+
+def resolve_token_from_message(data: dict) -> Tuple[Optional[User], Optional[Participant]]:
+    """
+    Extracts and verifies JWT token from a WebSocket message payload.
+    Expected format: { "token": "<jwt>" }
+    Returns (user, participant).
+    """
+    token = data.get("token")
+    if not token:
+        return None, None
+    return _decode_token(token)
+
+
+def _decode_token(token: str) -> Tuple[Optional[User], Optional[Participant]]:
+    """
+    Decode and verify a JWT token. Returns (user, participant).
+    """
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
 

@@ -23,8 +23,9 @@ class AdminPlatformViewSet(viewsets.ViewSet):
         return [IsAdmin()]
 
     @extend_schema(responses={200: dict})
-    @action(detail=False, methods=["get", "post"], url_path="seed-data")
+    @action(detail=False, methods=["post"], url_path="seed-data")
     def seed_data(self, request):
+        # POST-only: GET must never trigger state-changing (destructive) seeding.
         import seed_production_real_data
         seed_production_real_data.seed_real_data()
         return success_response(data={"seeded": True}, message="Successfully seeded real production data into PostgreSQL on Render!")

@@ -57,7 +57,7 @@ try:
             "college_name": "VRSEC Engineering College",
             "workshop_name": "E2E Championship Workshop",
             "event_date": "2026-08-25",
-            "passing_score": 300,
+            "passing_score": 600,
             "total_challenges": 5,
             "status": "Live",
         }

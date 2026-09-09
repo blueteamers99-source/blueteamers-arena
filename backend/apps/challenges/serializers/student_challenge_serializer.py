@@ -50,6 +50,7 @@ class StudentChallengeListSerializer(serializers.ModelSerializer):
             "points",
             "duration",
             "duration_minutes",
+            "passing_percentage",
             "skills",
             "status",
             "completed",
@@ -66,6 +67,17 @@ class StudentChallengeListSerializer(serializers.ModelSerializer):
         return "SOC Investigation"
 
     def _get_progress(self, obj):
+        """
+        Return the ParticipantProgress for this challenge from the pre-fetched
+        cache (populated in ChallengeViewSet.list). Falls back to a DB query
+        only when the cache is absent (e.g. when the serializer is used outside
+        the list endpoint).
+        """
+        cache = self.context.get("progress_cache")
+        if cache is not None:
+            return cache.get(str(obj.id))
+
+        # Fallback: single query (used by detail / non-list endpoints)
         request = self.context.get("request")
         if not request:
             return None

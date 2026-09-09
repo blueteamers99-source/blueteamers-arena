@@ -35,18 +35,7 @@ class IsLiveEvent(BasePermission):
 
 class IsChallengeUnlocked(BasePermission):
     """
-    Permission class verifying if a CTF challenge is unlocked for the student.
+    Placeholder — all challenges are accessible in any order.
     """
     def has_permission(self, request, view):
-        if not (request.user and request.user.is_authenticated):
-            return True  # Public list view check handled elsewhere
-
-        participant = getattr(request, "participant", None)
-        if not participant and request.user:
-            participant = getattr(request.user, "participant", None)
-
-        if not participant:
-            return False
-
-        # In Blueteamers Arena, Challenge 1 is always unlocked; subsequent challenges require event access
         return True

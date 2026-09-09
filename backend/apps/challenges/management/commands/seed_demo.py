@@ -1,3 +1,4 @@
+import os
 from datetime import date
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -99,11 +100,11 @@ class Command(BaseCommand):
                         ),
                     },
                     {
-                        "key": "email-screenshot",
+                        "key": "email",
                         "label": "Email Screenshot",
                         "filename": "email-screenshot.png",
                         "format": Evidence.FormatChoices.PNG,
-                        "image_url": "/assets/evidence-email.png",
+                        "image_url": "/__EVIDENCE_EMAIL__",
                     },
                 ],
                 "questions": [
@@ -280,7 +281,7 @@ class Command(BaseCommand):
                         "difficulty": q_data["diff"],
                         "kind": q_data["kind"],
                         "options_json": q_data.get("opts", []),
-                        "correct_option_index": q_data.get("correct_idx", 0),
+                        "correct_option_index": q_data.get("correct_idx"),
                         "correct_answer": q_data["ans"],
                         "default_points": q_data["pts"],
                         "status": Question.StatusChoices.PUBLISHED,

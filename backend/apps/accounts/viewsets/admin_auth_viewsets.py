@@ -5,7 +5,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from drf_spectacular.utils import extend_schema
 from apps.common.utils.response import success_response, error_response
-from apps.common.throttling import LoginRateThrottle
+from apps.common.throttling import AdminLoginRateThrottle, FailedLoginThrottle
 from apps.accounts.permissions.is_admin import IsAdmin
 from apps.accounts.models.user import User
 from apps.accounts.serializers.admin_auth_serializer import AdminLoginSerializer
@@ -14,7 +14,7 @@ from apps.accounts.serializers.student_auth_serializer import StudentProfileSeri
 
 class AdminLoginView(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = [LoginRateThrottle]
+    throttle_classes = [AdminLoginRateThrottle, FailedLoginThrottle]
 
     @extend_schema(request=AdminLoginSerializer)
     def post(self, request):
@@ -24,21 +24,38 @@ class AdminLoginView(APIView):
         query = serializer.validated_data["username_or_email"].strip().lower()
         password = serializer.validated_data["password"]
 
+        # Normalized failure response: identical for every failure to prevent
+        # account enumeration (distinct messages/status codes previously leaked
+        # whether an account existed, was inactive, or lacked the admin role).
+        failure = error_response(
+            message="Invalid administrator credentials.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+
         try:
             user = User.objects.get(Q(email__iexact=query) | Q(username__iexact=query))
         except User.DoesNotExist:
-            return error_response(message="Invalid administrator credentials.", status_code=status.HTTP_401_UNAUTHORIZED)
+            user = None
 
-        if not user.check_password(password):
-            return error_response(message="Invalid administrator credentials.", status_code=status.HTTP_401_UNAUTHORIZED)
+        # When the account does not exist, spend a similar amount of time
+        # validating a dummy hash so response timing does not reveal existence.
+        if user is None:
+            User().set_password("dummy-password-for-timing-normalization")
+            User().check_password(password)
+            return failure
 
-        if not user.is_active:
-            return error_response(message="Administrator account is inactive.", status_code=status.HTTP_403_FORBIDDEN)
+        if not user.check_password(password) or not user.is_active:
+            return failure
 
-        # STRICT ADMIN ROLE CHECK: Reject non-staff / student accounts
+        # Role enforcement: credentials are valid but this account is not an
+        # administrator. Distinct from 401 so clients can distinguish
+        # "wrong password" from "wrong portal" (401 = bad credentials,
+        # 403 = valid credentials, insufficient role). Enumeration is still
+        # prevented: this branch is only reachable *after* successful
+        # password verification.
         if not user.is_admin_role:
             return error_response(
-                message="Access denied. Only authorized administrators may log in here.",
+                message="This account does not have administrator access. Use the student portal.",
                 status_code=status.HTTP_403_FORBIDDEN,
             )
 

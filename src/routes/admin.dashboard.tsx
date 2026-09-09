@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { AdminLayout } from "../components/admin/AdminLayout";
 import { API_BASE_URL } from "@/lib/config";
+import { authFetch } from "@/lib/auth";
 
 type AdminDashboardSearch = {
   tab?: string;
@@ -75,7 +76,7 @@ function AdminDashboard() {
   };
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/admin/dashboard/`)
+    authFetch(`${API_BASE_URL}/admin/dashboard/`)
       .then((res) => res.json())
       .then((resData) => {
         if (resData && (resData.data || resData.success)) {
@@ -93,7 +94,7 @@ function AdminDashboard() {
       })
       .catch((err) => console.error("Error fetching admin dashboard stats:", err));
 
-    fetch(`${API_BASE_URL}/leaderboard/`)
+    authFetch(`${API_BASE_URL}/leaderboard/`)
       .then((res) => res.json())
       .then((resData) => {
         const list = resData.data?.rankings || resData.rankings || resData.data?.leaderboard || resData.leaderboard || resData.results || (Array.isArray(resData.data) ? resData.data : Array.isArray(resData) ? resData : []);
@@ -126,7 +127,7 @@ function AdminDashboard() {
     : ["System initialized with PostgreSQL."];
 
   const mappedLeaderboard = leaderboardItems.map((p: any, idx: number) => ({
-    rank: p.rank || idx + 1,
+    rank: typeof p.rank === "number" ? p.rank : null,
     student: p.name || p.student || "Security Analyst",
     college: p.college_name || p.college || "VRSEC",
     challenges: `${p.completed || p.completed_challenges || 0}/5`,
@@ -137,7 +138,7 @@ function AdminDashboard() {
   }));
 
   const podium = mappedLeaderboard.slice(0, 3).map((p, idx) => ({
-    rank: p.rank,
+    rank: p.rank ?? idx + 1,
     medal: idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉",
     name: p.student,
     college: p.college,
@@ -247,13 +248,20 @@ function AdminDashboard() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  fetch(`${API_BASE_URL}/admin/seed-data/`)
-                    .then((res) => res.json())
+                  authFetch(`${API_BASE_URL}/admin/seed-data/`)
+                    .then(async (res) => {
+                      if (!res.ok) {
+                        throw new Error(`Seeding failed (HTTP ${res.status}).`);
+                      }
+                      return res.json();
+                    })
                     .then((d) => {
                       alert(d.message || "Seeded successfully!");
                       window.location.reload();
                     })
-                    .catch(() => alert("Seeded successfully!"));
+                    .catch((err) =>
+                      alert(err?.message || "Seeding failed. Please try again.")
+                    );
                 }}
                 className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition-colors cursor-pointer"
               >
@@ -352,11 +360,11 @@ function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {filteredLeaderboard.map((row) => (
-                  <tr key={row.rank} className="transition-colors hover:bg-[var(--surface)]">
+                {filteredLeaderboard.map((row, idx) => (
+                  <tr key={row.rank ?? idx} className="transition-colors hover:bg-[var(--surface)]">
                     <td className="px-4 py-3">
                       <span className="inline-flex h-6 w-6 items-center justify-center rounded border border-border bg-background text-xs font-bold text-muted-foreground">
-                        #{row.rank}
+                        #{row.rank ?? "—"}
                       </span>
                     </td>
                     <td className="px-4 py-3 font-semibold text-foreground">
