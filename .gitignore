@@ -42,3 +42,17 @@ dist-ssr
 # Python cache
 __pycache__/
 *.pyc
+
+# Databases — local/development DB files must never be committed
+*.sqlite3
+*.sqlite
+*.db3
+backend/db.sqlite3
+
+# Private keys & payment secrets — block any future additions
+*.pem
+*.key
+*.p12
+*.jks
+rzp-key.csv
+.razorpay*
