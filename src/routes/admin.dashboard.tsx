@@ -13,9 +13,11 @@ import {
   CheckCircle2,
   Filter,
 } from "lucide-react";
-import { AdminLayout } from "../components/admin/AdminLayout";
+import { AdminLayout, type AdminNavItemId } from "../components/admin/AdminLayout";
 import { API_BASE_URL } from "@/lib/config";
 import { authFetch } from "@/lib/auth";
+import { asArray, asNumber, extractRankings, isRecord } from "@/lib/api-types";
+import type { AdminRecentEvent, LeaderboardEntry } from "@/lib/api-types";
 
 type AdminDashboardSearch = {
   tab?: string;
@@ -53,11 +55,11 @@ function AdminDashboard() {
     active_events: 0,
     total_participants: 0,
     total_questions: 0,
-    recent_events: [] as any[],
-    recent_activity: [] as any[],
+    recent_events: [] as AdminRecentEvent[],
+    recent_activity: [] as string[],
   });
 
-  const [leaderboardItems, setLeaderboardItems] = useState<any[]>([]);
+  const [leaderboardItems, setLeaderboardItems] = useState<LeaderboardEntry[]>([]);
 
   useEffect(() => {
     if (search.tab) {
@@ -78,17 +80,17 @@ function AdminDashboard() {
   useEffect(() => {
     authFetch(`${API_BASE_URL}/admin/dashboard/`)
       .then((res) => res.json())
-      .then((resData) => {
-        if (resData && (resData.data || resData.success)) {
-          const d = resData.data || resData;
-          const s = d.summary || d;
+      .then((resData: unknown) => {
+        if (isRecord(resData) && (resData.data || resData.success)) {
+          const d = isRecord(resData.data) ? resData.data : resData;
+          const s = isRecord(d.summary) ? d.summary : d;
           setDashStats({
-            total_events: s.total_events ?? d.total_events ?? 0,
-            active_events: s.live_events ?? s.active_events ?? d.active_events ?? 0,
-            total_participants: s.total_participants ?? d.total_participants ?? 0,
-            total_questions: s.total_questions ?? d.total_questions ?? 0,
-            recent_events: Array.isArray(d.recent_events) ? d.recent_events : [],
-            recent_activity: Array.isArray(d.recent_activity) ? d.recent_activity : [],
+            total_events: asNumber(s.total_events, asNumber(d.total_events, 0)),
+            active_events: asNumber(s.live_events, asNumber(s.active_events, asNumber(d.active_events, 0))),
+            total_participants: asNumber(s.total_participants, asNumber(d.total_participants, 0)),
+            total_questions: asNumber(s.total_questions, asNumber(d.total_questions, 0)),
+            recent_events: asArray<AdminRecentEvent>(d.recent_events),
+            recent_activity: asArray<string>(d.recent_activity),
           });
         }
       })
@@ -96,9 +98,9 @@ function AdminDashboard() {
 
     authFetch(`${API_BASE_URL}/leaderboard/`)
       .then((res) => res.json())
-      .then((resData) => {
-        const list = resData.data?.rankings || resData.rankings || resData.data?.leaderboard || resData.leaderboard || resData.results || (Array.isArray(resData.data) ? resData.data : Array.isArray(resData) ? resData : []);
-        if (Array.isArray(list)) {
+      .then((resData: unknown) => {
+        const list = extractRankings<LeaderboardEntry>(resData);
+        if (list.length > 0) {
           setLeaderboardItems(list);
         }
       })
@@ -113,11 +115,11 @@ function AdminDashboard() {
   ];
 
   const recentEvents = dashStats.recent_events.length > 0
-    ? dashStats.recent_events.map((e: any) => ({
-        event: e.workshop_name || e.title || e.name || "CTF Event",
+    ? dashStats.recent_events.map((e) => ({
+        event: e.workshop_name || "CTF Event",
         college: e.college_name || "College",
         participants: e.enrolled_participants ?? e.participants_count ?? 0,
-        status: e.status || (e.is_active ? "Live" : "Completed"),
+        status: e.status || "Completed",
         date: e.event_date || "2026-08-01",
       }))
     : [];
@@ -126,15 +128,15 @@ function AdminDashboard() {
     ? dashStats.recent_activity
     : ["System initialized with PostgreSQL."];
 
-  const mappedLeaderboard = leaderboardItems.map((p: any, idx: number) => ({
-    rank: typeof p.rank === "number" ? p.rank : null,
-    student: p.name || p.student || "Security Analyst",
-    college: p.college_name || p.college || "VRSEC",
-    challenges: `${p.completed || p.completed_challenges || 0}/5`,
-    completedCount: p.completed || p.completed_challenges || 0,
-    score: p.score || 0,
+  const mappedLeaderboard = leaderboardItems.map((p) => ({
+    rank: p.rank,
+    student: p.name,
+    college: p.college_name || "VRSEC",
+    challenges: `${p.completed}/5`,
+    completedCount: p.completed,
+    score: p.score,
     time: p.time_taken || "--:--",
-    status: (p.completed || 0) >= 5 ? "Completed" : "Running",
+    status: p.completed >= 5 ? "Completed" : "Running",
   }));
 
   const podium = mappedLeaderboard.slice(0, 3).map((p, idx) => ({
@@ -161,7 +163,7 @@ function AdminDashboard() {
   });
 
   return (
-    <AdminLayout activeId={activeTab as any} onTabChange={handleTabChange}>
+    <AdminLayout activeId={activeTab as AdminNavItemId} onTabChange={handleTabChange}>
       {activeTab === "dashboard" ? (
         <>
           <div>

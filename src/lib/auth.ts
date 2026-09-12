@@ -18,6 +18,11 @@ const STUDENT_ACCESS_KEY = "student_access_token";
 const STUDENT_REFRESH_KEY = "student_refresh_token";
 const STUDENT_USER_KEY = "student_user";
 
+// Legacy keys that older versions of the app used. They are no longer written,
+// but may still exist in browsers from before the consolidation to a single
+// key — removed during logout so stale tokens never survive.
+const LEGACY_STUDENT_TOKEN_KEYS = ["blueteamers_participant_token", "blueteamers_access_token"];
+
 // Admin Token Keys
 const ADMIN_ACCESS_KEY = "admin_access_token";
 const ADMIN_REFRESH_KEY = "admin_refresh_token";
@@ -54,6 +59,11 @@ export const clearStudentAuth = () => {
   localStorage.removeItem(STUDENT_ACCESS_KEY);
   localStorage.removeItem(STUDENT_REFRESH_KEY);
   localStorage.removeItem(STUDENT_USER_KEY);
+  // Migration safety net: purge legacy token keys from both storage types.
+  for (const key of LEGACY_STUDENT_TOKEN_KEYS) {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  }
 };
 
 export const isStudentLoggedIn = (): boolean => {
@@ -98,267 +108,147 @@ export const isAdminLoggedIn = (): boolean => {
 };
 
 // ---------------------------------------------------------------------------
-// Token refresh helpers (private)
+// authFetch factory — single implementation, two configurations
 // ---------------------------------------------------------------------------
 
-let isRefreshing = false;
-let failedQueue: Array<{
-  resolve: (token: string) => void;
-  reject: (err: unknown) => void;
-}> = [];
-
-let isStudentRefreshing = false;
-let studentFailedQueue: Array<{
-  resolve: (token: string) => void;
-  reject: (err: unknown) => void;
-}> = [];
-
-/** Resolve or reject every request that was queued while a refresh was in-flight. */
-const processQueue = (error: unknown, token: string | null = null) => {
-  failedQueue.forEach((entry) => {
-    if (error) entry.reject(error);
-    else entry.resolve(token!);
-  });
-  failedQueue = [];
-};
-
-const processStudentQueue = (error: unknown, token: string | null = null) => {
-  studentFailedQueue.forEach((entry) => {
-    if (error) entry.reject(error);
-    else entry.resolve(token!);
-  });
-  studentFailedQueue = [];
-};
-
-/**
- * Attempt to silently refresh the admin access token using the stored
- * refresh token.  Returns the new access token on success.
- * On failure (expired/missing refresh token) clears auth and redirects
- * the browser to the admin login page — this call never returns.
- */
-async function refreshAccessToken(): Promise<string> {
-  const refreshToken = isBrowser ? localStorage.getItem(ADMIN_REFRESH_KEY) : null;
-
-  if (!refreshToken) {
-    clearAdminAuth();
-    window.location.href = "/admin/login";
-    throw new Error("No refresh token — redirecting to login.");
-  }
-
-  const res = await fetch(`${API_BASE_URL}/admin/refresh/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh: refreshToken }),
-  });
-
-  const body = await res.json();
-
-  if (res.ok && body.success && body.data?.access) {
-    const newToken: string = body.data.access;
-    if (isBrowser) localStorage.setItem(ADMIN_ACCESS_KEY, newToken);
-    return newToken;
-  }
-
-  // Refresh token itself is invalid / expired — force re-login
-  clearAdminAuth();
-  window.location.href = "/admin/login";
-  throw new Error("Refresh token invalid — redirecting to login.");
+interface AuthFetchConfig {
+  /** localStorage key for the access token */
+  tokenKey: string;
+  /** localStorage key for the refresh token */
+  refreshKey: string;
+  /** Backend endpoint to POST the refresh token to */
+  refreshEndpoint: string;
+  /** URL to redirect to when refresh fails */
+  loginUrl: string;
+  /** Function to clear stored auth state on failure */
+  clearAuth: () => void;
 }
 
-// ---------------------------------------------------------------------------
-// authFetch — drop-in replacement for fetch()
-// ---------------------------------------------------------------------------
-
 /**
- * Drop-in replacement for fetch() that:
- *  1. Automatically attaches the admin Authorization header.
- *  2. On a 401 response, silently refreshes the access token and retries.
- *  3. If multiple requests 401 simultaneously, only one refresh call is made
- *     and all queued requests are retried once the new token arrives.
- *  4. If the refresh itself fails (expired refresh token), clears auth state
- *     and redirects to the admin login page.
- *  5. For FormData uploads the Content-Type header is left to the browser so
- *     the multipart boundary is set correctly.
+ * Factory that creates a drop-in fetch() replacement with:
+ *  1. Automatic Authorization header attachment.
+ *  2. Silent token refresh on 401 responses.
+ *  3. Request queuing so only one refresh call is made at a time.
+ *  4. Auth clear + redirect when refresh fails.
+ *  5. Correct Content-Type handling for FormData uploads.
  */
-export async function authFetch(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<Response> {
-  const headers = new Headers(init?.headers);
+function createAuthFetch(config: AuthFetchConfig) {
+  let isRefreshing = false;
+  let failedQueue: Array<{
+    resolve: (token: string) => void;
+    reject: (err: unknown) => void;
+  }> = [];
 
-  const token = isBrowser ? localStorage.getItem(ADMIN_ACCESS_KEY) : null;
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
+  const processQueue = (error: unknown, token: string | null = null) => {
+    failedQueue.forEach((entry) => {
+      if (error) {
+        entry.reject(error);
+      } else if (token) {
+        entry.resolve(token);
+      } else {
+        entry.reject(new Error("Token refresh failed."));
+      }
+    });
+    failedQueue = [];
+  };
 
-  // Only set Content-Type for non-FormData bodies so the browser can
-  // generate the correct multipart boundary for file uploads.
-  if (!headers.has("Content-Type") && !(init?.body instanceof FormData)) {
-    headers.set("Content-Type", "application/json");
-  }
+  const refreshToken = async (): Promise<string> => {
+    const storedRefresh = isBrowser ? localStorage.getItem(config.refreshKey) : null;
 
-  const response = await fetch(input, { ...init, headers });
+    if (!storedRefresh) {
+      config.clearAuth();
+      window.location.href = config.loginUrl;
+      throw new Error("No refresh token — redirecting to login.");
+    }
 
-  // ---- Not a 401 → return immediately as-is ----
-  if (response.status !== 401) {
-    return response;
-  }
-
-  // ---- 401 received → attempt token refresh ----
-
-  // If a refresh is already in-flight, queue this request and wait
-  if (isRefreshing) {
-    const newToken = await new Promise<string>((resolve, reject) => {
-      failedQueue.push({ resolve, reject });
+    const res = await fetch(`${API_BASE_URL}${config.refreshEndpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh: storedRefresh }),
     });
 
-    // Retry with the freshly obtained token
-    const retryHeaders = new Headers(init?.headers);
-    retryHeaders.set("Authorization", `Bearer ${newToken}`);
-    if (!retryHeaders.has("Content-Type") && !(init?.body instanceof FormData)) {
-      retryHeaders.set("Content-Type", "application/json");
+    const body = await res.json();
+
+    if (res.ok && body.success && body.data?.access) {
+      const newToken: string = body.data.access;
+      if (isBrowser) localStorage.setItem(config.tokenKey, newToken);
+      return newToken;
     }
-    return fetch(input, { ...init, headers: retryHeaders });
-  }
 
-  // We are the first request to hit 401 — own the refresh
-  isRefreshing = true;
+    config.clearAuth();
+    window.location.href = config.loginUrl;
+    throw new Error("Refresh token invalid — redirecting to login.");
+  };
 
-  try {
-    const newToken = await refreshAccessToken();
+  return async function authFetch(
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> {
+    const headers = new Headers(init?.headers);
 
-    // Notify any requests that were queued while we were refreshing
-    processQueue(null, newToken);
-
-    // Retry the original request with the new token
-    const retryHeaders = new Headers(init?.headers);
-    retryHeaders.set("Authorization", `Bearer ${newToken}`);
-    if (!retryHeaders.has("Content-Type") && !(init?.body instanceof FormData)) {
-      retryHeaders.set("Content-Type", "application/json");
+    const token = isBrowser ? localStorage.getItem(config.tokenKey) : null;
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
     }
-    return fetch(input, { ...init, headers: retryHeaders });
-  } catch (err) {
-    // Refresh failed — reject every queued request so callers' .catch() fires
-    processQueue(err);
-    throw err;
-  } finally {
-    isRefreshing = false;
-  }
+
+    if (!headers.has("Content-Type") && !(init?.body instanceof FormData)) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    const response = await fetch(input, { ...init, headers });
+
+    if (response.status !== 401) {
+      return response;
+    }
+
+    if (isRefreshing) {
+      const newToken = await new Promise<string>((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      });
+
+      const retryHeaders = new Headers(init?.headers);
+      retryHeaders.set("Authorization", `Bearer ${newToken}`);
+      if (!retryHeaders.has("Content-Type") && !(init?.body instanceof FormData)) {
+        retryHeaders.set("Content-Type", "application/json");
+      }
+      return fetch(input, { ...init, headers: retryHeaders });
+    }
+
+    isRefreshing = true;
+
+    try {
+      const newToken = await refreshToken();
+      processQueue(null, newToken);
+
+      const retryHeaders = new Headers(init?.headers);
+      retryHeaders.set("Authorization", `Bearer ${newToken}`);
+      if (!retryHeaders.has("Content-Type") && !(init?.body instanceof FormData)) {
+        retryHeaders.set("Content-Type", "application/json");
+      }
+      return fetch(input, { ...init, headers: retryHeaders });
+    } catch (err) {
+      processQueue(err);
+      throw err;
+    } finally {
+      isRefreshing = false;
+    }
+  };
 }
 
-// ---------------------------------------------------------------------------
-// Student token refresh helpers (private)
-// ---------------------------------------------------------------------------
+/** Drop-in replacement for fetch() for admin pages. */
+export const authFetch = createAuthFetch({
+  tokenKey: ADMIN_ACCESS_KEY,
+  refreshKey: ADMIN_REFRESH_KEY,
+  refreshEndpoint: "/admin/refresh/",
+  loginUrl: "/admin/login",
+  clearAuth: clearAdminAuth,
+});
 
-/**
- * Attempt to silently refresh the student access token using the stored
- * refresh token. Returns the new access token on success.
- * On failure (expired/missing refresh token) clears auth and redirects
- * the browser to the login page.
- */
-async function refreshStudentAccessToken(): Promise<string> {
-  const refreshToken = isBrowser ? localStorage.getItem(STUDENT_REFRESH_KEY) : null;
-
-  if (!refreshToken) {
-    clearStudentAuth();
-    window.location.href = "/login";
-    throw new Error("No refresh token — redirecting to login.");
-  }
-
-  const res = await fetch(`${API_BASE_URL}/auth/token/refresh/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh: refreshToken }),
-  });
-
-  const body = await res.json();
-
-  if (res.ok && body.success && body.data?.access) {
-    const newToken: string = body.data.access;
-    if (isBrowser) localStorage.setItem(STUDENT_ACCESS_KEY, newToken);
-    return newToken;
-  }
-
-  // Refresh token itself is invalid / expired — force re-login
-  clearStudentAuth();
-  window.location.href = "/login";
-  throw new Error("Refresh token invalid — redirecting to login.");
-}
-
-// ---------------------------------------------------------------------------
-// studentAuthFetch — drop-in replacement for fetch() for student pages
-// ---------------------------------------------------------------------------
-
-/**
- * Drop-in replacement for fetch() for student-facing pages that:
- *  1. Automatically attaches the student Authorization header.
- *  2. On a 401 response, silently refreshes the access token and retries.
- *  3. If multiple requests 401 simultaneously, only one refresh call is made
- *     and all queued requests are retried once the new token arrives.
- *  4. If the refresh itself fails (expired refresh token), clears auth state
- *     and redirects to the student login page.
- *  5. For FormData uploads the Content-Type header is left to the browser so
- *     the multipart boundary is set correctly.
- */
-export async function studentAuthFetch(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<Response> {
-  const headers = new Headers(init?.headers);
-
-  const token = isBrowser ? localStorage.getItem(STUDENT_ACCESS_KEY) : null;
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  if (!headers.has("Content-Type") && !(init?.body instanceof FormData)) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  const response = await fetch(input, { ...init, headers });
-
-  // ---- Not a 401 → return immediately as-is ----
-  if (response.status !== 401) {
-    return response;
-  }
-
-  // ---- 401 received → attempt token refresh ----
-
-  // If a refresh is already in-flight, queue this request and wait
-  if (isStudentRefreshing) {
-    const newToken = await new Promise<string>((resolve, reject) => {
-      studentFailedQueue.push({ resolve, reject });
-    });
-
-    const retryHeaders = new Headers(init?.headers);
-    retryHeaders.set("Authorization", `Bearer ${newToken}`);
-    if (!retryHeaders.has("Content-Type") && !(init?.body instanceof FormData)) {
-      retryHeaders.set("Content-Type", "application/json");
-    }
-    return fetch(input, { ...init, headers: retryHeaders });
-  }
-
-  // We are the first request to hit 401 — own the refresh
-  isStudentRefreshing = true;
-
-  try {
-    const newToken = await refreshStudentAccessToken();
-
-    // Notify any requests that were queued while we were refreshing
-    processStudentQueue(null, newToken);
-
-    // Retry the original request with the new token
-    const retryHeaders = new Headers(init?.headers);
-    retryHeaders.set("Authorization", `Bearer ${newToken}`);
-    if (!retryHeaders.has("Content-Type") && !(init?.body instanceof FormData)) {
-      retryHeaders.set("Content-Type", "application/json");
-    }
-    return fetch(input, { ...init, headers: retryHeaders });
-  } catch (err) {
-    // Refresh failed — reject every queued request so callers' .catch() fires
-    processStudentQueue(err);
-    throw err;
-  } finally {
-    isStudentRefreshing = false;
-  }
-}
+/** Drop-in replacement for fetch() for student pages. */
+export const studentAuthFetch = createAuthFetch({
+  tokenKey: STUDENT_ACCESS_KEY,
+  refreshKey: STUDENT_REFRESH_KEY,
+  refreshEndpoint: "/auth/token/refresh/",
+  loginUrl: "/login",
+  clearAuth: clearStudentAuth,
+});

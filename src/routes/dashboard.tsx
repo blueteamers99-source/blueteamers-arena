@@ -25,8 +25,16 @@ import {
   FileText,
 } from "lucide-react";
 import ChallengesPage from "@/components/ChallengesPage";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { API_BASE_URL } from "@/lib/config";
 import { studentAuthFetch } from "@/lib/auth";
+import { asString, extractRankings, extractResults, isRecord } from "@/lib/api-types";
+import type {
+  CertificateResponse,
+  ChallengeListItem,
+  LeaderboardEntry,
+  StudentDashboard,
+} from "@/lib/api-types";
 import {
   ACCENT_CLASSES,
   getSelectedEvent,
@@ -49,8 +57,29 @@ type DashboardSearch = {
   tab?: string;
 };
 
-export const Route = createFileRoute("/dashboard")({
-  validateSearch: (search: Record<string, unknown>): DashboardSearch => ({
+// Authenticated certificate PDF download: plain <a href> cannot attach the
+// Authorization header the backend requires, so fetch as a blob instead.
+async function downloadCertificatePdf(certificateId: string): Promise<void> {
+  const res = await studentAuthFetch(`${API_BASE_URL}/certificate/download/${certificateId}/`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || "Certificate download failed. Please re-enter your event code and try again.");
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match?.[1] || `certificate_${certificateId}.pdf`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export const Route = createFileRoute("/dashboard")({ validateSearch: (search: Record<string, unknown>): DashboardSearch => ({
     tab: (search?.tab as string) || undefined,
   }),
   component: Dashboard,
@@ -80,18 +109,7 @@ const rules = [
   "Auto Submit on Timeout",
 ];
 
-const podium = [
-  { rank: 1, medal: "🥇", name: "Rahul", score: 950, time: "1:42:18", color: "#F59E0B", border: "border-amber-500/60", bg: "from-amber-500/10 via-card to-card" },
-  { rank: 2, medal: "🥈", name: "Akhil", score: 910, time: "1:45:07", color: "#9CA3AF", border: "border-slate-400/40", bg: "from-slate-400/10 via-card to-card" },
-  { rank: 3, medal: "🥉", name: "Sanjay", score: 890, time: "1:48:12", color: "#B45309", border: "border-amber-700/40", bg: "from-amber-700/10 via-card to-card" },
-];
 
-const tableRows = [
-  { rank: 4, student: "Anjali", challenges: "5/5", score: 870, time: "1:49:52", status: "Completed" },
-  { rank: 5, student: "Kiran", challenges: "5/5", score: 850, time: "1:52:41", status: "Completed" },
-  { rank: 6, student: "Priya", challenges: "4/5", score: 720, time: "—", status: "Running" },
-  { rank: 7, student: "Rohith", challenges: "3/5", score: 610, time: "—", status: "Running" },
-];
 
 type LeaderboardFilter = "All" | "Completed" | "Running";
 
@@ -142,17 +160,17 @@ function Dashboard() {
 
   const [rulesOpen, setRulesOpen] = useState(false);
   const [certPanelOpen, setCertPanelOpen] = useState(false);
-  const [certData, setCertData] = useState<any | null>(null);
+  const [certData, setCertData] = useState<CertificateResponse | null>(null);
   const [certLoading, setCertLoading] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [name, setName] = useState("Rahul");
   const [ev, setEv] = useState<MockEvent>(() => getSelectedEvent());
 
   // Live state from PostgreSQL
-  const [dashboardData, setDashboardData] = useState<any>(null);
-  const [challengeList, setChallengeList] = useState<any[]>([]);
-  const [leaderboardItems, setLeaderboardItems] = useState<any[]>([]);
-  const [selectedChallenge, setSelectedChallenge] = useState<any | null>(null);
+  const [dashboardData, setDashboardData] = useState<StudentDashboard | null>(null);
+  const [challengeList, setChallengeList] = useState<ChallengeListItem[]>([]);
+  const [leaderboardItems, setLeaderboardItems] = useState<LeaderboardEntry[]>([]);
+  const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
   const [challengeSearch, setChallengeSearch] = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("All");
 
@@ -175,21 +193,19 @@ function Dashboard() {
 
     studentAuthFetch(meUrl)
       .then((res) => res.json())
-      .then((resData) => {
-        if (resData && (resData.name || resData.data)) {
-          const d = resData.data || resData;
-          setDashboardData(resData);
-          if (resData.name || d.name) setName(resData.name || d.name);
-          if (Array.isArray(d.challenges)) setChallengeList(d.challenges);
+      .then((resData: unknown) => {
+        if (resData && (isRecord(resData) && (resData.name || resData.data))) {
+          setDashboardData(resData as unknown as StudentDashboard);
+          if (resData.name) setName(asString(resData.name, "Rahul"));
         }
       })
       .catch((err) => console.error("Error fetching student dashboard me:", err));
 
     studentAuthFetch(`${API_BASE_URL}/challenges/`)
       .then((res) => res.json())
-      .then((resData) => {
-        const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
-        if (Array.isArray(list) && list.length > 0) {
+      .then((resData: unknown) => {
+        const list = extractResults<ChallengeListItem>(resData);
+        if (list.length > 0) {
           setChallengeList(list);
         }
       })
@@ -200,13 +216,8 @@ function Dashboard() {
         if (!res.ok) throw new Error("Failed to fetch leaderboard");
         return res.json();
       })
-      .then((resData) => {
-        const data = resData.data || resData;
-        const list = Array.isArray(data.rankings) ? data.rankings
-          : Array.isArray(data.leaderboard) ? data.leaderboard
-          : Array.isArray(data.results) ? data.results
-          : Array.isArray(data) ? data
-          : [];
+      .then((resData: unknown) => {
+        const list = extractRankings<LeaderboardEntry>(resData);
         if (list.length > 0) {
           setLeaderboardItems(list);
         }
@@ -215,8 +226,8 @@ function Dashboard() {
   }, []);
 
   const filteredChallenges = useMemo(() => {
-    return challengeList.filter((c: any) => {
-      const title = String(c.title || c.name || "").toLowerCase();
+    return challengeList.filter((c) => {
+      const title = String(c.name || "").toLowerCase();
       const desc = String(c.description || "").toLowerCase();
       const q = challengeSearch.toLowerCase();
       const matchSearch = !q || title.includes(q) || desc.includes(q);
@@ -228,13 +239,13 @@ function Dashboard() {
   }, [challengeList, challengeSearch, filterDifficulty]);
 
   const filteredLeaderboardRows = useMemo(() => {
-    return leaderboardItems.map((p: any, idx: number) => ({
+    return leaderboardItems.map((p) => ({
       // Server-computed rank (ordered by score); never renumber after filtering.
-      rank: typeof p.rank === "number" ? p.rank : idx + 1,
-      student: p.name || p.participant_name || "Student",
-      challenges: `${p.completed || 0}/5`,
-      score: p.score || 0,
-      time: p.time_taken || "--:--",
+      rank: p.rank,
+      student: p.name,
+      challenges: `${p.completed}/5`,
+      score: p.score,
+      time: p.time_taken,
       status: p.completed > 0 ? "Completed" : "Running",
     })).filter((row) => {
       const matchesSearch = row.student.toLowerCase().includes(leaderboardSearch.toLowerCase());
@@ -245,8 +256,8 @@ function Dashboard() {
 
   const accent = { text: "text-primary", border: "border-primary", bg: "bg-primary", bgSoft: "bg-primary/10", hover: "hover:bg-primary/80" };
 
-  const handleStartChallenge = (c: any) => {
-    setActive(c.slug || c.id || "phishnet");
+  const handleStartChallenge = (c: Challenge | null) => {
+    setActive(c?.id || "phishnet");
     navigate({ to: "/challenge/play" });
   };
 
@@ -263,7 +274,30 @@ function Dashboard() {
     { label: "Challenges", value: `${done} / ${total}`, icon: Target, sub: "Completed" },
   ];
 
-  const sortedPodium = [podium[1], podium[0], podium[2]];
+  // Build podium from real leaderboard data (top 3 by score)
+  const sortedPodium = useMemo(() => {
+    const top3 = [...leaderboardItems]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map((item, idx) => {
+        const rank = idx + 1;
+        const colors: Record<number, { medal: string; color: string; border: string; bg: string }> = {
+          1: { medal: "🥇", color: "#F59E0B", border: "border-amber-500/60", bg: "from-amber-500/10 via-card to-card" },
+          2: { medal: "🥈", color: "#9CA3AF", border: "border-slate-400/40", bg: "from-slate-400/10 via-card to-card" },
+          3: { medal: "🥉", color: "#B45309", border: "border-amber-700/40", bg: "from-amber-700/10 via-card to-card" },
+        };
+        return {
+          rank,
+          ...colors[rank],
+          name: item.name,
+          score: item.score,
+          time: item.time_taken,
+        };
+      });
+    // Reorder for display: [2nd, 1st, 3rd]
+    if (top3.length === 3) return [top3[1], top3[0], top3[2]];
+    return top3;
+  }, [leaderboardItems]);
 
   return (
     <div className="relative min-h-screen bg-background text-foreground overflow-hidden">
@@ -390,6 +424,7 @@ function Dashboard() {
         {activeTab === "Dashboard" && (
           <div className="p-6 lg:p-8 space-y-6 w-full max-w-[1600px]">
             {/* Hero Welcome Card */}
+            <ErrorBoundary label="Dashboard Hero">
             <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-card/90 p-6 sm:p-8 shadow-xl backdrop-blur-sm">
               <div className={`pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full ${accent.bgSoft} blur-3xl`} />
 
@@ -417,8 +452,10 @@ function Dashboard() {
                 </div>
               </div>
             </div>
+            </ErrorBoundary>
 
             {/* Stats 4-Grid */}
+            <ErrorBoundary label="Dashboard Stats">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               {dashboardStats.map((s) => (
                 <div
@@ -434,6 +471,7 @@ function Dashboard() {
                 </div>
               ))}
             </div>
+            </ErrorBoundary>
 
             {/* 2-Column Section */}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -529,6 +567,7 @@ function Dashboard() {
             </div>
 
             {/* Podium Top 3 Champions Section */}
+            <ErrorBoundary label="Leaderboard Podium">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:items-end">
               {sortedPodium.map((p) => {
                 const isFirst = p.rank === 1;
@@ -561,6 +600,7 @@ function Dashboard() {
                 );
               })}
             </div>
+            </ErrorBoundary>
 
             {/* Leaderboard Table (Ranks 4+) */}
             <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xl backdrop-blur-sm">
@@ -825,7 +865,7 @@ function DetailsModal({
 
         <Section title="Resources Included">
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium text-muted-foreground">
-            {(challenge.resources || [{ name: "evidence-logs.txt" }]).map((r: any, idx: number) => (
+            {(challenge.resources || [{ name: "evidence-logs.txt" }]).map((r, idx) => (
               <li key={r.name || idx} className="flex items-center gap-2 truncate rounded-lg border border-border/40 bg-[var(--surface)] px-3 py-2">
                 <FileText className={`h-3.5 w-3.5 shrink-0 ${accentText}`} />
                 <span className="truncate text-foreground">{r.name || "Evidence file"}</span>
@@ -869,7 +909,7 @@ function CertificateModal({
   certLoading,
   onClose,
 }: {
-  certData: any | null;
+  certData: CertificateResponse | null;
   certLoading: boolean;
   onClose: () => void;
 }) {
@@ -955,14 +995,20 @@ function CertificateModal({
             >
               Close
             </button>
-                <a
-                  href={certData.download_url || `/api/v1/certificate/download/${certData.certificate_id}/`}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  onClick={() => {
+                    const certId = certData.certificate_id;
+                    if (!certId) return;
+                    downloadCertificatePdf(certId).catch((err) => {
+                      console.error("Certificate download failed:", err);
+                      alert(err instanceof Error ? err.message : "Certificate download failed. Please try again.");
+                    });
+                  }}
                   className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-xs font-bold text-primary-foreground shadow-md transition-all hover:bg-primary/90"
                 >
                   <Award className="h-4 w-4" /> Download / Print Certificate
-                </a>
+                </button>
               </div>
             </div>
           </>

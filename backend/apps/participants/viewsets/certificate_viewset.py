@@ -36,7 +36,8 @@ class CertificateViewSet(viewsets.ViewSet):
         is_score_passed = participant.score >= passing_score
         is_challenges_completed = participant.completed >= total_challenges
         is_eligible = is_score_passed and is_challenges_completed
-        cert_id = f"CERT-BLUETEAM-{str(participant.id).upper()}"
+        # Previous template format: compact verification ID (first 8 UUID chars).
+        cert_id = f"CERT-BLUETEAM-{str(participant.id)[:8].upper()}"
         if not is_eligible:
             reasons = []
             if not is_challenges_completed:
@@ -92,14 +93,20 @@ class CertificateViewSet(viewsets.ViewSet):
             return Response({"success": False, "message": "Participant authentication required."}, status=status.HTTP_401_UNAUTHORIZED)
         if not verification_id:
             return Response({"success": False, "message": "Verification ID required."}, status=status.HTTP_400_BAD_REQUEST)
-        # Extract participant UUID from verification ID
+        # Resolve the ID: accept both the compact display form (first 8 UUID
+        # chars — previous template format) and the full 36-char UUID.
         p_id = verification_id.replace("CERT-BLUETEAM-", "").replace("CERT-BTA-", "").lower().strip()
-        if len(p_id) != 36 or p_id.count("-") != 4:
+        if len(p_id) < 8:
             return Response({"success": False, "message": "Invalid certificate verification ID format."}, status=status.HTTP_404_NOT_FOUND)
-        if str(auth_participant.id).lower() != p_id:
+        is_full_uuid = len(p_id) == 36 and p_id.count("-") == 4
+        # Ownership: startswith covers both forms (equality for full UUIDs).
+        if not str(auth_participant.id).lower().startswith(p_id):
             return Response({"success": False, "message": "Forbidden. You may only download your own certificate."}, status=status.HTTP_403_FORBIDDEN)
         try:
-            participant = Participant.objects.get(id__iexact=p_id)
+            if is_full_uuid:
+                participant = Participant.objects.get(id__iexact=p_id)
+            else:
+                participant = Participant.objects.get(id__istartswith=p_id)
         except (Participant.DoesNotExist, Exception):
             return Response({"success": False, "message": "Certificate record not found."}, status=status.HTTP_404_NOT_FOUND)
         # Enforce full eligibility: score AND challenge completion
@@ -144,17 +151,22 @@ class CertificateViewSet(viewsets.ViewSet):
                 "status": "INVALID",
                 "message": "Verification ID is required.",
             }, status=status.HTTP_400_BAD_REQUEST)
-        # Extract participant UUID from verification ID
+        # Resolve the ID: accept both the compact display form (first 8 UUID
+        # chars — previous template format) and the full 36-char UUID.
         p_id = verification_id.replace("CERT-BLUETEAM-", "").replace("CERT-BTA-", "").lower().strip()
-        if len(p_id) != 36 or p_id.count("-") != 4:
+        if len(p_id) < 8:
             return Response({
                 "success": False,
                 "verified": False,
                 "status": "INVALID",
                 "message": "This certificate was not issued by Blueteamers Arena.",
             }, status=status.HTTP_404_NOT_FOUND)
+        is_full_uuid = len(p_id) == 36 and p_id.count("-") == 4
         try:
-            participant = Participant.objects.get(id__iexact=p_id)
+            if is_full_uuid:
+                participant = Participant.objects.get(id__iexact=p_id)
+            else:
+                participant = Participant.objects.get(id__istartswith=p_id)
         except (Participant.DoesNotExist, Exception):
             return Response({
                 "success": False,
@@ -163,7 +175,8 @@ class CertificateViewSet(viewsets.ViewSet):
                 "message": "This certificate was not issued by Blueteamers Arena.",
             }, status=status.HTTP_404_NOT_FOUND)
         # Ownership: participants may only verify their own certificate.
-        if str(auth_participant.id).lower() != p_id:
+        # startswith covers both forms (equality for full UUIDs).
+        if not str(auth_participant.id).lower().startswith(p_id):
             return Response({
                 "success": False,
                 "verified": False,

@@ -37,6 +37,8 @@ import {
   type Challenge,
 } from "@/lib/mock-challenges";
 import { API_BASE_URL } from "@/lib/config";
+import { getStudentAccessToken } from "@/lib/auth";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import evidenceEmail from "@/assets/evidence-email.png";
 import evidenceUrl from "@/assets/evidence-url.png";
 import evidenceWazuh from "@/assets/evidence-wazuh.png";
@@ -112,6 +114,7 @@ function PlayPage() {
   const [activeEvidence, setActiveEvidence] = useState<string>("");
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const initialLoadedRef = useRef(false);
@@ -135,9 +138,16 @@ function PlayPage() {
     setRemaining(localChallenge.duration * 60);
     if (localChallenge.evidence?.length) setActiveEvidence(localChallenge.evidence[0].id);
     setZoom(localChallenge.number === 5 ? 1.5 : 1);
+    setAccessDenied(false);
 
-    // 1. Fetch live challenge definition if available
-    fetchChallengeDetailApi(activeId).then((serverChall) => {
+    // 1. Fetch live challenge definition if available.
+    // A 403 means the backend rejected cross-event access — show the
+    // access-denied state instead of falling back to mock content.
+    fetchChallengeDetailApi(activeId).then(({ challenge: serverChall, forbidden }) => {
+      if (forbidden) {
+        setAccessDenied(true);
+        return;
+      }
       if (serverChall) {
         setChallenge(serverChall);
       }
@@ -162,7 +172,8 @@ function PlayPage() {
         } else if (progressState.draft_answers && typeof progressState.draft_answers === "object") {
           for (const [k, v] of Object.entries(progressState.draft_answers)) {
             if (v && typeof v === "object" && "answer_text" in v) {
-              restoredAnswers[k] = (v as any).answer_text || "";
+              const inner = v as { answer_text?: unknown };
+              restoredAnswers[k] = typeof inner.answer_text === "string" ? inner.answer_text : "";
             } else if (v !== undefined && v !== null) {
               restoredAnswers[k] = String(v);
             }
@@ -192,8 +203,22 @@ function PlayPage() {
   // Server-authoritative timer countdown
   useEffect(() => {
     if (!challenge) return;
-    const id = setInterval(() => setRemaining((r) => (r > 0 ? r - 1 : 0)), 1000);
-    return () => clearInterval(id);
+
+    // Local tick for smooth UI countdown
+    const localTick = setInterval(() => setRemaining((r) => (r > 0 ? r - 1 : 0)), 1000);
+
+    // Periodic server sync to correct drift across tabs / background throttling
+    const serverSync = setInterval(async () => {
+      const progress = await fetchProgressApi(challenge.id);
+      if (progress && typeof progress.remaining_time_seconds === "number") {
+        setRemaining(progress.remaining_time_seconds);
+      }
+    }, 10000); // Sync every 10 seconds
+
+    return () => {
+      clearInterval(localTick);
+      clearInterval(serverSync);
+    };
   }, [challenge]);
 
   // Debounced auto-save on answers or current question changes
@@ -223,9 +248,7 @@ function PlayPage() {
   useEffect(() => {
     const handleUnload = () => {
       if (challenge && initialLoadedRef.current) {
-        const token = typeof localStorage !== "undefined"
-          ? localStorage.getItem("student_access_token")
-          : null;
+        const token = getStudentAccessToken();
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
         };
@@ -259,6 +282,35 @@ function PlayPage() {
     () => (challenge && challenge.questions ? challenge.questions.filter((q) => answers[q.id]?.trim()).length : 0),
     [answers, challenge],
   );
+
+  // Auto-redirect to arena when the backend denies cross-event access.
+  useEffect(() => {
+    if (!accessDenied) return;
+    const id = setTimeout(() => navigate({ to: "/arena" }), 4000);
+    return () => clearTimeout(id);
+  }, [accessDenied, navigate]);
+
+  if (accessDenied) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="max-w-md text-center">
+          <AlertTriangle className="mx-auto h-12 w-12 text-amber-400" />
+          <h2 className="mt-4 text-xl font-semibold">Challenge Not Available</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            This challenge is not part of your registered event. You can only access challenges
+            belonging to the event you joined with your event code.
+          </p>
+          <button
+            onClick={() => navigate({ to: "/arena" })}
+            className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+          >
+            Back to Arena
+          </button>
+          <p className="mt-3 text-xs text-muted-foreground">Redirecting automatically...</p>
+        </div>
+      </main>
+    );
+  }
 
   if (!ev || !challenge) {
     return (
@@ -440,6 +492,7 @@ function PlayPage() {
         </aside>
 
         {/* Center */}
+        <ErrorBoundary label="Challenge Workspace">
         <section className="space-y-4">
           {evidence.length > 0 && currentEvidence ? (
             <Panel>
@@ -687,6 +740,7 @@ function PlayPage() {
             )}
           </div>
         </section>
+        </ErrorBoundary>
 
         {/* Right sidebar */}
         <aside className="space-y-4">

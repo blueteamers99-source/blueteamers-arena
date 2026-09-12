@@ -16,6 +16,8 @@ import {
 import { AdminLayout } from "../components/admin/AdminLayout";
 import { API_BASE_URL } from "@/lib/config";
 import { authFetch } from "@/lib/auth";
+import { extractResults } from "@/lib/api-types";
+import type { AdminParticipantItem } from "@/lib/api-types";
 
 export const Route = createFileRoute("/admin/participants")({
   component: AdminParticipants,
@@ -54,11 +56,11 @@ function AdminParticipants() {
   const loadParticipants = () => {
     authFetch(`${API_BASE_URL}/admin/participants/`)
       .then((res) => res.json())
-      .then((resData) => {
-        const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
-        if (Array.isArray(list)) {
+      .then((resData: unknown) => {
+        const list = extractResults<AdminParticipantItem>(resData);
+        if (list.length > 0) {
           setParticipants(
-            list.map((item: any) => ({
+            list.map((item) => ({
               id: strVal(item.id),
               name: item.name || "Student",
               email: item.email || "",
@@ -77,7 +79,7 @@ function AdminParticipants() {
     loadParticipants();
   }, []);
 
-  const strVal = (val: any) => (val ? String(val) : String(Math.random()));
+  const strVal = (val: string | number | null | undefined) => (val ? String(val) : String(Math.random()));
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

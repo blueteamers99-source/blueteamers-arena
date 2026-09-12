@@ -2,7 +2,9 @@ import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ShieldCheck, AlertCircle, Award, CheckCircle2, Trophy, Building2, Calendar, FileText } from "lucide-react";
 import { API_BASE_URL } from "@/lib/config";
-import { getAuthToken } from "@/lib/mock-challenges";
+import { studentAuthFetch } from "@/lib/auth";
+import { isRecord } from "@/lib/api-types";
+import type { CertificateVerifyResponse } from "@/lib/api-types";
 
 export const Route = createFileRoute("/verify")({
   component: VerifyPage,
@@ -13,7 +15,7 @@ export const Route = createFileRoute("/verify")({
 
 function VerifyPage() {
   const search = useSearch({ from: "/verify" });
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<CertificateVerifyResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [needsAuth, setNeedsAuth] = useState(false);
@@ -27,19 +29,17 @@ function VerifyPage() {
       return;
     }
 
-    const token = getAuthToken();
-    fetch(`${API_BASE_URL}/certificate/verify/${verificationId}/`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
+    studentAuthFetch(`${API_BASE_URL}/certificate/verify/${verificationId}/`)
       .then(async (res) => {
-        const resData = await res.json().catch(() => ({}));
+        const resData: unknown = await res.json().catch(() => ({}));
+        const message = isRecord(resData) && typeof resData.message === "string" ? resData.message : undefined;
         if (res.status === 401 || res.status === 403) {
           setNeedsAuth(true);
-          setError(resData.message || "Please log in or re-enter your event code to view this certificate.");
-        } else if (resData.verified) {
-          setData(resData);
+          setError(message || "Please log in or re-enter your event code to view this certificate.");
+        } else if (isRecord(resData) && resData.verified) {
+          setData(resData as CertificateVerifyResponse);
         } else {
-          setError(resData.message || "This certificate was not issued by Blueteamers Arena.");
+          setError(message || "This certificate was not issued by Blueteamers Arena.");
         }
       })
       .catch((err) => setError("Failed to verify credential. Please try again."))
@@ -50,10 +50,7 @@ function VerifyPage() {
     if (!data?.verification_id || downloading) return;
     setDownloading(true);
     try {
-      const token = getAuthToken();
-      const res = await fetch(`${API_BASE_URL}/certificate/download/${data.verification_id}/`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await studentAuthFetch(`${API_BASE_URL}/certificate/download/${data.verification_id}/`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         setError(body.message || "Certificate download failed. Please re-enter your event code and try again.");
@@ -108,7 +105,7 @@ function VerifyPage() {
             <h2 className="text-base font-bold text-destructive">Invalid Certificate</h2>
             <p className="text-xs text-muted-foreground">{error}</p>
           </div>
-        ) : (
+        ) : data ? (
           <div className="space-y-6">
             <div className="text-center space-y-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Credential Holder</span>
@@ -156,7 +153,7 @@ function VerifyPage() {
               </button>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </main>
   );

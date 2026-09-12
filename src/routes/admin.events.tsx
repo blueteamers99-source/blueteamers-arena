@@ -21,6 +21,8 @@ import {
 import { AdminLayout } from "../components/admin/AdminLayout";
 import { API_BASE_URL } from "@/lib/config";
 import { authFetch } from "@/lib/auth";
+import { extractResults, isRecord } from "@/lib/api-types";
+import type { ApprovedStudent, EventItem } from "@/lib/api-types";
 
 export const Route = createFileRoute("/admin/events")({
   component: AdminEvents,
@@ -79,34 +81,22 @@ function AdminEvents() {
   const [showCreate, setShowCreate] = useState(false);
   const [viewingEvent, setViewingEvent] = useState<EventRow | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventRow | null>(null);
+  const [actionMsg, setActionMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const fetchEvents = () => {
-    const processResponseData = (resData: any) => {
-      let list: any[] = [];
-      if (Array.isArray(resData)) {
-        list = resData;
-      } else if (Array.isArray(resData.results)) {
-        list = resData.results;
-      } else if (resData && resData.data) {
-        const d = resData.data;
-        if (Array.isArray(d)) list = d;
-        else if (Array.isArray(d.results)) list = d.results;
-      }
+    const processResponseData = (resData: unknown) => {
+      const list = extractResults<EventItem>(resData);
       setEvents(
-        list.map((e: any) => ({
-          id: String(e.id ?? e.pk ?? Math.random()),
-          name: String(e.name || e.workshop_name || "CTF Workshop"),
-          college: String(e.college_name || e.college || "—"),
-          code: String(e.event_code || e.code || "—"),
-          participants: Number(e.enrolled_participants ?? e.participants_count ?? e.participants ?? 0),
+        list.map((e) => ({
+          id: String(e.id ?? Math.random()),
+          name: String(e.workshop_name || "CTF Workshop"),
+          college: String(e.college_name || "—"),
+          code: String(e.event_code || "—"),
+          participants: Number(e.participants_count ?? e.enrolled_participants ?? 0),
           status: normalizeStatus(e.status),
-          date: String(e.event_date || e.date || "—"),
+          date: String(e.event_date || "—"),
           description: String(e.description || ""),
-          learningOutcomes: String(e.learning_outcomes || e.learningOutcomes || ""),
-          prerequisites: String(e.prerequisites || ""),
-          totalScore: Number(e.total_score || e.totalScore || 1000),
-          passingScore: Number(e.passing_score || e.passingScore || 600),
-          certificateAvailable: e.certificate_available ?? e.certificateAvailable ?? true,
+          passingScore: Number(e.passing_score || 600),
         }))
       );
       setError(null);
@@ -147,8 +137,16 @@ function AdminEvents() {
       authFetch(`${API_BASE_URL}/events/${id}/`, {
         method: "DELETE",
       })
-        .then(() => fetchEvents())
-        .catch(() => fetchEvents());
+        .then((res) => {
+          if (!res.ok) throw new Error(`Delete failed (HTTP ${res.status})`);
+          setActionMsg({ type: "success", text: "Event deleted successfully." });
+          fetchEvents();
+        })
+        .catch((err) => {
+          console.error("Error deleting event:", err);
+          setActionMsg({ type: "error", text: "Failed to delete event. Please try again." });
+          fetchEvents();
+        });
     }
   };
 
@@ -170,8 +168,16 @@ function AdminEvents() {
         prerequisites: src.prerequisites || "",
       }),
     })
-      .then(() => fetchEvents())
-      .catch(() => fetchEvents());
+      .then((res) => {
+        if (!res.ok) throw new Error(`Duplicate failed (HTTP ${res.status})`);
+        setActionMsg({ type: "success", text: `Event duplicated as "${src.code}-CPY".` });
+        fetchEvents();
+      })
+      .catch((err) => {
+        console.error("Error duplicating event:", err);
+        setActionMsg({ type: "error", text: `Failed to duplicate event. The event code "${src.code}-CPY" may already exist.` });
+        fetchEvents();
+      });
   };
 
   const handleToggleStatus = (row: EventRow) => {
@@ -180,8 +186,16 @@ function AdminEvents() {
       method: "PATCH",
       body: JSON.stringify({ status: nextStatus }),
     })
-      .then(() => fetchEvents())
-      .catch(() => fetchEvents());
+      .then((res) => {
+        if (!res.ok) throw new Error(`Status update failed (HTTP ${res.status})`);
+        setActionMsg({ type: "success", text: `Event status changed to ${nextStatus}.` });
+        fetchEvents();
+      })
+      .catch((err) => {
+        console.error("Error updating event status:", err);
+        setActionMsg({ type: "error", text: `Failed to change status to ${nextStatus}. The event status was NOT updated.` });
+        fetchEvents();
+      });
   };
 
   const handleCreate = (formData: {
@@ -223,9 +237,13 @@ function AdminEvents() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
-      .then(() => fetchEvents())
+      .then(() => {
+        setActionMsg({ type: "success", text: "Event created successfully." });
+        fetchEvents();
+      })
       .catch((err) => {
         console.error("[Create Event] error:", err);
+        setActionMsg({ type: "error", text: "Failed to create event. Please check the details and try again." });
         fetchEvents();
       });
 
@@ -251,8 +269,16 @@ function AdminEvents() {
       method: "PUT",
       body: JSON.stringify(body),
     })
-      .then(() => fetchEvents())
-      .catch(() => fetchEvents());
+      .then((res) => {
+        if (!res.ok) throw new Error(`Update failed (HTTP ${res.status})`);
+        setActionMsg({ type: "success", text: "Event updated successfully." });
+        fetchEvents();
+      })
+      .catch((err) => {
+        console.error("Error updating event:", err);
+        setActionMsg({ type: "error", text: "Failed to update event. Your changes were not saved." });
+        fetchEvents();
+      });
 
     setEditingEvent(null);
   };
@@ -274,6 +300,18 @@ function AdminEvents() {
           <Plus className="h-4 w-4" /> Create Event
         </button>
       </div>
+
+      {actionMsg && (
+        <div
+          className={`mt-4 rounded-lg border px-4 py-2.5 text-sm font-medium ${
+            actionMsg.type === "success"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+              : "border-destructive/30 bg-destructive/10 text-destructive"
+          }`}
+        >
+          {actionMsg.text}
+        </div>
+      )}
 
       <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative flex-1 max-w-md">
@@ -451,7 +489,7 @@ function ViewEventModal({ event, onClose }: { event: EventRow; onClose: () => vo
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const [approvedStudents, setApprovedStudents] = useState<any[]>([]);
+  const [approvedStudents, setApprovedStudents] = useState<ApprovedStudent[]>([]);
   const [studentSearch, setStudentSearch] = useState("");
   const [stats, setStats] = useState({ csv_uploaded: 0, arena_joined: 0, pending: 0 });
   const [loadingStudents, setLoadingStudents] = useState(false);
@@ -460,14 +498,18 @@ function ViewEventModal({ event, onClose }: { event: EventRow; onClose: () => vo
     setLoadingStudents(true);
     authFetch(`${API_BASE_URL}/events/${event.id}/approved-students/?search=${encodeURIComponent(studentSearch)}`)
       .then((res) => res.json())
-      .then((resData) => {
-        if (resData && resData.success) {
-          const list = resData.results || resData.data || [];
+      .then((resData: unknown) => {
+        if (isRecord(resData) && resData.success) {
+          const list = (Array.isArray(resData.results)
+            ? resData.results
+            : Array.isArray(resData.data)
+              ? resData.data
+              : []) as ApprovedStudent[];
           setApprovedStudents(list);
           setStats({
-            csv_uploaded: resData.csv_uploaded_count || list.length,
-            arena_joined: resData.arena_joined_count || list.filter((s: any) => s.has_joined).length,
-            pending: resData.pending_count || list.filter((s: any) => !s.has_joined).length,
+            csv_uploaded: Number(resData.csv_uploaded_count) || list.length,
+            arena_joined: Number(resData.arena_joined_count) || list.filter((s) => s.has_joined).length,
+            pending: Number(resData.pending_count) || list.filter((s) => !s.has_joined).length,
           });
         }
       })
@@ -482,6 +524,24 @@ function ViewEventModal({ event, onClose }: { event: EventRow; onClose: () => vo
   const handleUploadCsv = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!csvFile) return;
+
+    // Client-side validation: file type
+    if (!csvFile.name.endsWith(".csv")) {
+      setUploadMsg({ type: "error", text: "Please upload a .csv file." });
+      return;
+    }
+
+    // Client-side validation: file size (5MB max)
+    if (csvFile.size > 5 * 1024 * 1024) {
+      setUploadMsg({ type: "error", text: "File too large. Maximum size is 5MB." });
+      return;
+    }
+
+    // Client-side validation: empty file
+    if (csvFile.size === 0) {
+      setUploadMsg({ type: "error", text: "File is empty. Please choose a valid CSV file." });
+      return;
+    }
 
     setUploading(true);
     setUploadMsg(null);
@@ -503,30 +563,37 @@ function ViewEventModal({ event, onClose }: { event: EventRow; onClose: () => vo
       } else {
         setUploadMsg({ type: "error", text: data.message || "CSV Upload failed." });
       }
-    } catch (err: any) {
-      setUploadMsg({ type: "error", text: `Upload failed: ${err.message || err}` });
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setUploadMsg({ type: "error", text: `Upload failed: ${detail}` });
     } finally {
       setUploading(false);
     }
   };
 
-  const handleDeleteStudent = async (studentId: string) => {
+  const handleDeleteStudent = async (studentId: string | undefined) => {
+    if (!studentId) return;
     if (!confirm("Are you sure you want to remove this approved student?")) return;
     try {
-      await authFetch(`${API_BASE_URL}/events/${event.id}/approved-students/?student_id=${studentId}`, {
+      const res = await authFetch(`${API_BASE_URL}/events/${event.id}/approved-students/?student_id=${studentId}`, {
         method: "DELETE",
       });
+      if (!res.ok) throw new Error(`Delete failed (HTTP ${res.status})`);
+      setUploadMsg({ type: "success", text: "Approved student removed." });
       loadApprovedStudents();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error deleting student:", err);
+      const detail = err instanceof Error ? err.message : String(err);
+      setUploadMsg({ type: "error", text: `Failed to remove student: ${detail}` });
     }
   };
 
   const handleExportCsv = () => {
     if (!approvedStudents.length) return;
+    const escapeCSV = (value: string) => `"${String(value).replace(/"/g, '""')}"`;
     const csvContent =
       "Registered Name,Registered Email,Status\n" +
-      approvedStudents.map((s) => `"${s.registered_name}","${s.registered_email}","${s.status}"`).join("\n");
+      approvedStudents.map((s) => `${escapeCSV(s.registered_name)},${escapeCSV(s.registered_email)},${escapeCSV(s.status)}`).join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");

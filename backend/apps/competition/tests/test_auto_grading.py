@@ -143,3 +143,85 @@ class AutoGradingEngineTests(TestCase):
         is_corr_g, score_g, _ = AnswerValidationService.validate_answer(q, "yes maybe totally")
         self.assertFalse(is_corr_g)
         self.assertEqual(score_g, 0.0)
+
+    def test_pipe_separated_alternatives_full_credit(self):
+        """Regression: '|'-separated answer keys never matched a single
+        alternative before the blended scorer. Each alternative must remain
+        answerable exactly and after tech-normalization (e.g. timezone-less
+        timestamp against a '09:10:22 UTC' alternative)."""
+        cases = [
+            ("09:10:22 UTC|09:10:22", "09:10:22"),
+            ("09:10:22 UTC|09:10:22", "09:10:22 UTC"),
+            ("Registry Run Key persistence.|Registry Run Key", "Registry Run Key persistence."),
+            ("backup.zip|backup.zip - containing Finance, HR, and Passwords.xlsx data.", "backup.zip"),
+        ]
+        for key, provided in cases:
+            q = Question.objects.create(
+                category=Question.CategoryChoices.PHISHING,
+                difficulty=Question.DifficultyChoices.EASY,
+                kind=Question.QuestionKindChoices.TEXT,
+                question_text="Technical detail?",
+                correct_answer=key,
+                default_points=10,
+            )
+            is_corr, score, _ = AnswerValidationService.validate_answer(q, provided)
+            self.assertTrue(is_corr, f"'{provided}' should fully match key '{key}'")
+            self.assertEqual(score, 1.0)
+
+    def test_blended_fact_list_partial_credit(self):
+        """Comma-separated fact keys award proportional credit for the covered
+        subset (the blended similarity percentage), while any full reproduction
+        still earns full marks."""
+        key = "SPF fail, DMARC fail, Spoofed From header"
+        q = Question.objects.create(
+            category=Question.CategoryChoices.PHISHING,
+            difficulty=Question.DifficultyChoices.MEDIUM,
+            kind=Question.QuestionKindChoices.TEXT,
+            question_text="List three phishing indicators found in this email.",
+            correct_answer=key,
+            default_points=50,
+        )
+        # Two of the three facts -> proportional partial credit.
+        is_corr, score, _ = AnswerValidationService.validate_answer(q, "SPF fail and DMARC fail")
+        self.assertFalse(is_corr)
+        self.assertGreaterEqual(score, PARTIAL_MATCH_THRESHOLD)
+        self.assertLess(score, 1.0)
+
+        # Full reproduction in different order + extra words -> full credit.
+        is_corr_f, score_f, _ = AnswerValidationService.validate_answer(
+            q, "Spoofed From header, SPF fail, and DMARC fail"
+        )
+        self.assertTrue(is_corr_f)
+        self.assertEqual(score_f, 1.0)
+
+        # Unrelated single word must stay at zero.
+        is_corr_g, score_g, _ = AnswerValidationService.validate_answer(q, "spam")
+        self.assertFalse(is_corr_g)
+        self.assertEqual(score_g, 0.0)
+
+    def test_blended_score_typo_tolerance(self):
+        """The edit signal forgives small typos but not missing content: a
+        one-character typo on one element keeps near-full credit; replacing an
+        element earns proportional credit for what remains."""
+        q = Question.objects.create(
+            category=Question.CategoryChoices.PHISHING,
+            difficulty=Question.DifficultyChoices.MEDIUM,
+            kind=Question.QuestionKindChoices.TEXT,
+            question_text="What suspicious process chain was detected?",
+            correct_answer="WINWORD.EXE -> powershell.exe -> rundll32.exe",
+            default_points=25,
+        )
+        # One-character typo -> partial but close to full credit.
+        is_corr, score, _ = AnswerValidationService.validate_answer(
+            q, "WINWORD.EXE -> powershell.exe -> rundl32.exe"
+        )
+        self.assertFalse(is_corr)
+        self.assertGreaterEqual(score, PARTIAL_MATCH_THRESHOLD)
+        self.assertLess(score, 1.0)
+
+        # One wrong element -> proportional credit for the two correct ones.
+        is_corr_w, score_w, _ = AnswerValidationService.validate_answer(
+            q, "WINWORD.EXE -> notepad.exe -> rundll32.exe"
+        )
+        self.assertFalse(is_corr_w)
+        self.assertEqual(score_w, 0.65)

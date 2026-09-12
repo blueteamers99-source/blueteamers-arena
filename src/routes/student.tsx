@@ -46,7 +46,12 @@ function Student() {
     setError("");
 
     const ev = getSelectedEvent();
-    const eventCode = ev?.code || localStorage.getItem("saved_event_code") || "CBIT-3154";
+    const eventCode = ev?.code || localStorage.getItem("saved_event_code");
+    if (!eventCode) {
+      setError("No event selected. Please go back and select an event first.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch(`${API_BASE_URL}/participants/register-student/`, {
@@ -76,8 +81,7 @@ function Student() {
               role: "STUDENT",
             }
           );
-          localStorage.setItem("blueteamers_participant_token", token);
-          sessionStorage.setItem("blueteamers_participant_token", token);
+
         }
         navigate({ to: "/dashboard" });
       } else {

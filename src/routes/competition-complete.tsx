@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { API_BASE_URL } from "@/lib/config";
 import { studentAuthFetch } from "@/lib/auth";
+import type { CertificateResponse, StudentDashboard } from "@/lib/api-types";
 
 export const Route = createFileRoute("/competition-complete")({
   component: CompetitionComplete,
@@ -37,8 +38,8 @@ export const Route = createFileRoute("/competition-complete")({
 
 function CompetitionComplete() {
   const navigate = useNavigate();
-  const [data, setData] = useState<any>(null);
-  const [certData, setCertData] = useState<any>(null);
+  const [data, setData] = useState<StudentDashboard | null>(null);
+  const [certData, setCertData] = useState<CertificateResponse | null>(null);
 
   useEffect(() => {
     const eventCode = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("arena.selectedEventCode") : null;
@@ -53,15 +54,15 @@ function CompetitionComplete() {
 
     studentAuthFetch(url)
       .then((res) => res.json())
-      .then((resData) => {
-        if (resData) setData(resData);
+      .then((resData: unknown) => {
+        if (resData) setData(resData as StudentDashboard);
       })
       .catch(() => {});
 
     // Fetch official PostgreSQL certificate status
     studentAuthFetch(`${API_BASE_URL}/certificate/`)
       .then((res) => res.json())
-      .then((cData) => setCertData(cData))
+      .then((cData: unknown) => setCertData(cData as CertificateResponse))
       .catch(() => {});
   }, []);
 
@@ -121,14 +122,17 @@ function CompetitionComplete() {
               {certData.unlocked ? (
                 <div className="space-y-2">
                   <p>🎓 Official Certificate Unlocked! ID: <span className="font-mono font-bold">{certData.certificate_id}</span></p>
-                  <a
-                    href={`/certificate?id=${certData.certificate_id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-emerald-700 transition-all"
-                  >
-                    🎓 View & Download Verified Certificate
-                  </a>
+                  {certData.certificate_id ? (
+                    <Link
+                      to="/verify"
+                      search={{ id: certData.certificate_id }}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-emerald-700 transition-all"
+                    >
+                      🎓 View & Download Verified Certificate
+                    </Link>
+                  ) : null}
                 </div>
               ) : (
                 <div>

@@ -175,46 +175,54 @@ const NAME_KEY = "arena.studentName";
 export function saveSelectedEvent(code: string) {
   if (typeof window !== "undefined") {
     sessionStorage.setItem(KEY, code);
-    localStorage.setItem(KEY, code);
   }
-}
-
-// Clear session validation whenever the student leaves the page (navigates away, refreshes, closes tab/window)
-if (typeof window !== "undefined") {
-  const clearSession = () => {
-    sessionStorage.removeItem(KEY);
-    sessionStorage.removeItem("is_code_verified");
-  };
-  window.addEventListener("pagehide", clearSession);
-  window.addEventListener("beforeunload", clearSession);
 }
 
 export function getSelectedEvent(): MockEvent {
   if (typeof window === "undefined") return EVENTS["VRSEC-4851"];
+  // String/number field guards: reject non-string/non-finite values so
+  // tampered or malformed localStorage data can never reach the UI.
+  const asString = (v: unknown, fallback: string): string =>
+    typeof v === "string" && v.trim() ? v.trim() : fallback;
+  const asNumber = (v: unknown, fallback: number): number => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  };
+  const asMode = (v: unknown, fallback: MockEvent["mode"]): MockEvent["mode"] =>
+    v === "Offline" || v === "Online" || v === "Hybrid" ? v : fallback;
   const rawData = localStorage.getItem("selected_event_data");
   if (rawData) {
     try {
-      const parsed = JSON.parse(rawData);
-      const codeStr = parsed.event_code || "VRSEC-4851";
+      const parsed: unknown = JSON.parse(rawData);
+      // Schema gate: must be a plain object carrying at least one known field,
+      // otherwise fall through to the code-based event lookup below.
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("selected_event_data is not a plain object");
+      }
+      const obj = parsed as Record<string, unknown>;
+      if (!obj.event_code && !obj.college_name && !obj.college && !obj.title && !obj.name) {
+        throw new Error("selected_event_data has no recognizable fields");
+      }
+      const codeStr = asString(obj.event_code, "VRSEC-4851");
       return {
         ...DEFAULT_EVENT_DETAILS,
         code: codeStr,
-        college: parsed.college || parsed.college_name || "VRSEC",
-        workshop: parsed.title || parsed.name || "AI-Powered Blue Team Workshop 2026",
-        description: parsed.description || DEFAULT_EVENT_DETAILS.description,
-        participants: Number(parsed.enrolled_participants || parsed.participants || 180),
+        college: asString(obj.college ?? obj.college_name, "VRSEC"),
+        workshop: asString(obj.title ?? obj.name, "AI-Powered Blue Team Workshop 2026"),
+        description: asString(obj.description, DEFAULT_EVENT_DETAILS.description),
+        participants: asNumber(obj.enrolled_participants ?? obj.participants, 180),
         accent: "blue",
-        date: parsed.event_date || parsed.date || DEFAULT_EVENT_DETAILS.date,
-        duration: parsed.duration || DEFAULT_EVENT_DETAILS.duration,
-        challenges: Number(parsed.challenges_count || 20),
-        venue: parsed.venue || DEFAULT_EVENT_DETAILS.venue,
-        mode: parsed.mode || DEFAULT_EVENT_DETAILS.mode,
+        date: asString(obj.event_date ?? obj.date, DEFAULT_EVENT_DETAILS.date),
+        duration: asString(obj.duration, DEFAULT_EVENT_DETAILS.duration),
+        challenges: asNumber(obj.challenges_count, 20),
+        venue: asString(obj.venue, DEFAULT_EVENT_DETAILS.venue),
+        mode: asMode(obj.mode, DEFAULT_EVENT_DETAILS.mode),
       };
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Invalid selected_event_data in localStorage, using defaults:", e);
+    }
   }
-  const code = (sessionStorage.getItem(KEY) || localStorage.getItem(KEY) || "VRSEC-4851")
-    .toUpperCase()
-    .trim();
+  const code = (sessionStorage.getItem(KEY) || "VRSEC-4851").toUpperCase().trim();
   return EVENTS[code] ?? { ...EVENTS["VRSEC-4851"], code };
 }
 

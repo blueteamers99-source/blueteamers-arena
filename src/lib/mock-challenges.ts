@@ -1,5 +1,12 @@
 import { API_BASE_URL } from "./config";
 import { studentAuthFetch, getStudentUser } from "./auth";
+import { asArray, extractObject, isRecord } from "./api-types";
+import type {
+  ChallengeDetailDTO,
+  ChallengeListItem,
+  SubmissionPayload,
+  SubmissionResult,
+} from "./api-types";
 
 export type Difficulty = "Easy" | "Medium" | "Hard";
 export type ChallengeStatus = "not_started" | "in_progress" | "completed";
@@ -299,18 +306,9 @@ export const DIFFICULTY_BADGE: Record<Difficulty, string> = {
   Hard: "bg-rose-500/10 text-rose-400 border-rose-500/30",
 };
 
-export function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return (
-    localStorage.getItem("student_access_token") ||
-    sessionStorage.getItem("student_access_token") ||
-    localStorage.getItem("blueteamers_participant_token") ||
-    sessionStorage.getItem("blueteamers_participant_token") ||
-    localStorage.getItem("blueteamers_access_token") ||
-    sessionStorage.getItem("blueteamers_access_token") ||
-    null
-  );
-}
+// getAuthToken() removed — use studentAuthFetch() from @/lib/auth instead.
+// The old function checked 6 different storage keys (including legacy
+// blueteamers_* keys), which could return stale/wrong tokens.
 
 export interface ChallengeProgressState {
   status: "not_started" | "in_progress" | "completed" | "expired";
@@ -322,7 +320,7 @@ export interface ChallengeProgressState {
   max_possible_score: number;
   time_limit_seconds: number;
   remaining_time_seconds: number;
-  draft_answers: Record<string, any>;
+  draft_answers: Record<string, unknown>;
   answers: Record<string, string>;
   started_at?: string | null;
   last_activity_at?: string | null;
@@ -357,10 +355,15 @@ export async function fetchChallengesApi(): Promise<Challenge[]> {
   try {
     const res = await studentAuthFetch(`${API_BASE_URL}/challenges/`);
     if (!res.ok) return CHALLENGES;
-    const json = await res.json();
-    const list = json.results || json.data || json;
-    if (Array.isArray(list) && list.length > 0) {
-      return list.map((item: any) => {
+    const json: unknown = await res.json();
+    const candidates: unknown = isRecord(json)
+      ? isRecord(json.data) && Array.isArray(json.data.results)
+        ? json.data.results
+        : json.results ?? json.data
+      : json;
+    const list = asArray<ChallengeListItem>(candidates);
+    if (list.length > 0) {
+      return list.map((item) => {
         const itemSlug = item.slug || item.id;
         const fb = CHALLENGES.find((c) => c.id === itemSlug || c.number === item.challenge_number) || CHALLENGES[0];
         return {
@@ -368,12 +371,12 @@ export async function fetchChallengesApi(): Promise<Challenge[]> {
           number: item.number || item.challenge_number || fb.number,
           name: item.name || fb.name,
           description: item.description || fb.description,
-          difficulty: item.difficulty || fb.difficulty,
+          difficulty: (item.difficulty || fb.difficulty) as Difficulty,
           duration: item.duration || item.duration_minutes || fb.duration,
           points: item.points || fb.points,
           skills: item.skills && item.skills.length > 0 ? item.skills : fb.skills,
           objectives: item.objectives && item.objectives.length > 0 ? item.objectives : fb.objectives,
-          brief: item.brief || fb.brief || item.description,
+          brief: item.brief || fb.brief || fb.description,
           resources: item.resources && item.resources.length > 0 ? item.resources : fb.resources,
           evidence: item.evidence && item.evidence.length > 0 ? item.evidence : fb.evidence,
           questions: item.questions && item.questions.length > 0 ? item.questions : fb.questions,
@@ -386,35 +389,46 @@ export async function fetchChallengesApi(): Promise<Challenge[]> {
   return CHALLENGES;
 }
 
-export async function fetchChallengeDetailApi(id: string): Promise<Challenge | null> {
+export async function fetchChallengeDetailApi(
+  id: string,
+): Promise<{ challenge: Challenge | null; forbidden: boolean }> {
+  // Returns `forbidden: true` when the backend rejects cross-event access (403)
+  // so the caller can show an access-denied state instead of mock fallback.
   try {
     const res = await studentAuthFetch(`${API_BASE_URL}/challenges/${id}/`);
-    if (!res.ok) return CHALLENGES.find((c) => c.id === id) || null;
-    const json = await res.json();
-    const item = json.challenge || json.data || json;
+    if (res.status === 403) {
+      return { challenge: null, forbidden: true };
+    }
+    if (!res.ok) return { challenge: CHALLENGES.find((c) => c.id === id) || null, forbidden: false };
+    const json: unknown = await res.json();
+    const item = extractObject<ChallengeDetailDTO>(json);
     if (item && item.name) {
-      const itemSlug = item.slug || item.id || id;
+      const itemSlug = item.slug || item.id;
       const fb = CHALLENGES.find((c) => c.id === itemSlug || c.id === id) || CHALLENGES[0];
       return {
-        id: itemSlug,
-        number: item.number || item.challenge_number || fb.number,
-        name: item.name || fb.name,
-        description: item.description || fb.description,
-        difficulty: item.difficulty || fb.difficulty,
-        duration: item.duration || item.duration_minutes || fb.duration,
-        points: item.points || fb.points,
-        skills: item.skills && item.skills.length > 0 ? item.skills : fb.skills,
-        objectives: item.objectives && item.objectives.length > 0 ? item.objectives : fb.objectives,
-        brief: item.brief || fb.brief || item.description,
-        resources: item.resources && item.resources.length > 0 ? item.resources : fb.resources,
-        evidence: item.evidence && item.evidence.length > 0 ? item.evidence : fb.evidence,
-        questions: item.questions && item.questions.length > 0 ? item.questions : fb.questions,
+        challenge: {
+          id: itemSlug || id,
+          number: item.number || item.challenge_number || fb.number,
+          name: item.name || fb.name,
+          description: item.description || fb.description,
+          difficulty: (item.difficulty || fb.difficulty) as Difficulty,
+          duration: item.duration || item.duration_minutes || fb.duration,
+          points: item.points || fb.points,
+          skills: item.skills && item.skills.length > 0 ? item.skills : fb.skills,
+          objectives: item.objectives && item.objectives.length > 0 ? item.objectives : fb.objectives,
+          brief: item.brief || fb.brief || fb.description,
+          resources: item.resources && item.resources.length > 0 ? item.resources : fb.resources,
+          evidence: item.evidence && item.evidence.length > 0 ? item.evidence : fb.evidence,
+          questions: item.questions && item.questions.length > 0 ? item.questions : fb.questions,
+        },
+        forbidden: false,
       };
     }
   } catch {
-    // fallback
+    // network failure — fall back to mock content
+    return { challenge: CHALLENGES.find((c) => c.id === id) || null, forbidden: false };
   }
-  return CHALLENGES.find((c) => c.id === id) || null;
+  return { challenge: CHALLENGES.find((c) => c.id === id) || null, forbidden: false };
 }
 
 export async function startChallengeApi(id: string): Promise<ChallengeProgressState | null> {
@@ -460,19 +474,19 @@ export async function saveProgressApi(
   }
 }
 
-export async function submitChallengeApi(id: string, answers: Record<string, string>): Promise<any> {
+export async function submitChallengeApi(id: string, answers: Record<string, string>): Promise<SubmissionResult> {
   try {
     const res = await studentAuthFetch(`${API_BASE_URL}/challenges/${id}/submit/`, {
       method: "POST",
       body: JSON.stringify({ answers }),
     });
     if (res.ok) {
-      const json = await res.json();
+      const json = (await res.json()) as SubmissionResult;
       // Persist the server-graded earned score so the dashboard/leaderboard
       // display the real score instead of the challenge's max points.
-      const payload = json?.data || json || {};
-      const earned = typeof payload.score_earned === "number" ? payload.score_earned : 0;
-      const maxPossible = typeof payload.max_possible_score === "number" ? payload.max_possible_score : 0;
+      const payload = (json?.data || json) as SubmissionPayload | undefined;
+      const earned = typeof payload?.score_earned === "number" ? payload.score_earned : 0;
+      const maxPossible = typeof payload?.max_possible_score === "number" ? payload.max_possible_score : 0;
       setChallengeScore(id, earned, maxPossible);
       // Only mark completed after server confirms success
       setStatus(id, "completed");
