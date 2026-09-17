@@ -4,18 +4,16 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  CheckCircle2,
   Clock,
   Download,
   FileText,
   Flag,
   Lightbulb,
   Maximize2,
-  RotateCcw,
   Save,
   Target,
   Trophy,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react";
 import {
   ACCENT_CLASSES,
@@ -112,11 +110,93 @@ function PlayPage() {
   const [remaining, setRemaining] = useState(0);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [activeEvidence, setActiveEvidence] = useState<string>("");
-  const [zoom, setZoom] = useState(1);
+  const [peek, setPeek] = useState<{
+    px: number;
+    py: number;
+    vw: number;
+    vh: number;
+    scale: number;
+  } | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const peekRef = useRef(peek);
+  peekRef.current = peek;
+  const peekReleaseTimer = useRef<number | null>(null);
+  // This screen must never zoom the browser page: swallow Ctrl/meta + wheel
+  // (mouse wheel and trackpad pinch both arrive as wheel events with ctrlKey)
+  // anywhere on the page. Pinching should only magnify the evidence image.
+  useEffect(() => {
+    const blockPageZoom = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) e.preventDefault();
+    };
+    window.addEventListener("wheel", blockPageZoom, { passive: false });
+    return () => window.removeEventListener("wheel", blockPageZoom);
+  }, []);
+  const schedulePeekRelease = () => {
+    if (peekReleaseTimer.current !== null) window.clearTimeout(peekReleaseTimer.current);
+    peekReleaseTimer.current = window.setTimeout(() => {
+      peekReleaseTimer.current = null;
+      setPeek(null);
+    }, 250);
+  };
+  // The zoomed focal point, measured as the image pixel under the cursor:
+  // px/py = position of that image point within the viewer (in px), plus the
+  // viewer's current on-screen size. During zoom the scaled image is panned so
+  // this point sits exactly at the viewer center, so the image is always
+  // visible and magnified. Pressing outside the image falls back to the image
+  // center so a zoom can never show an empty (black) view.
+  const resolvePeekFocus = (clientX: number, clientY: number, el: HTMLDivElement) => {
+    const rect = el.getBoundingClientRect();
+    const img = el.querySelector("img");
+    const fallback = { px: rect.width / 2, py: rect.height / 2, vw: rect.width, vh: rect.height };
+    if (!img || !img.parentElement) return fallback;
+    // Use layout metrics (offset*) rather than getBoundingClientRect: the
+    // zoom transform is applied to the image's container, so the visual rect
+    // changes while zooming and would give wrong coordinates on repeat events.
+    const fit = img.parentElement;
+    const imgL = fit.offsetLeft + img.offsetLeft;
+    const imgT = fit.offsetTop + img.offsetTop;
+    const imgW = img.offsetWidth;
+    const imgH = img.offsetHeight;
+    if (imgW <= 0 || imgH <= 0) return fallback;
+    const rawX = clientX - rect.left;
+    const rawY = clientY - rect.top;
+    const inside = rawX >= imgL && rawX <= imgL + imgW && rawY >= imgT && rawY <= imgT + imgH;
+    const px = inside ? rawX : imgL + imgW / 2;
+    const py = inside ? rawY : imgT + imgH / 2;
+    return { px, py, vw: rect.width, vh: rect.height };
+  };
+  const nextZoomScale = (deltaY: number) =>
+    Math.min(6, Math.max((peekRef.current?.scale ?? 1.5) + (deltaY < 0 ? 0.25 : -0.25), 1.2));
+  const inlineViewerRef = useImageZoomWheel((e, el) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    const f = resolvePeekFocus(e.clientX, e.clientY, el);
+    setPeek({ ...f, scale: nextZoomScale(e.deltaY) });
+    schedulePeekRelease();
+  });
+  const fullscreenViewerRef = useImageZoomWheel((e, el) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    const f = resolvePeekFocus(e.clientX, e.clientY, el);
+    setPeek({ ...f, scale: nextZoomScale(e.deltaY) });
+    schedulePeekRelease();
+  }, fullscreen);
+  const peekStyle = peek
+    ? {
+        transformOrigin: "0 0" as const,
+        transform: `translate(${peek.vw / 2 - peek.scale * peek.px}px, ${
+          peek.vh / 2 - peek.scale * peek.py
+        }px) scale(${peek.scale})`,
+        transition: "transform 120ms ease-out",
+      }
+    : {
+        transformOrigin: "0 0" as const,
+        transition: "transform 200ms ease-out",
+      };
   const [accessDenied, setAccessDenied] = useState(false);
+  const [completedChallenge, setCompletedChallenge] = useState(false);
+  const [completedScore, setCompletedScore] = useState<{ earned: number; max: number } | null>(null);
 
-  const viewerRef = useRef<HTMLDivElement | null>(null);
   const initialLoadedRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
   const answersRef = useRef(answers);
@@ -137,7 +217,6 @@ function PlayPage() {
     setEv(getSelectedEvent());
     setRemaining(localChallenge.duration * 60);
     if (localChallenge.evidence?.length) setActiveEvidence(localChallenge.evidence[0].id);
-    setZoom(localChallenge.number === 5 ? 1.5 : 1);
     setAccessDenied(false);
 
     // 1. Fetch live challenge definition if available.
@@ -150,6 +229,13 @@ function PlayPage() {
       }
       if (serverChall) {
         setChallenge(serverChall);
+        // Re-anchor the preview tab to the server's FIRST evidence. The
+        // initial selection above comes from the local mock, whose evidence
+        // order can differ from the server's — leaving it untouched would
+        // open the workspace on the wrong (e.g. 2nd) resource.
+        if (serverChall.evidence?.length) {
+          setActiveEvidence(serverChall.evidence[0].id);
+        }
       }
     });
 
@@ -184,6 +270,16 @@ function PlayPage() {
           setAnswers(restoredAnswers);
         }
 
+        if (progressState.status === "completed") {
+          setCompletedChallenge(true);
+          setCompletedScore({
+            earned: typeof progressState.score_earned === "number" ? progressState.score_earned : 0,
+            max:
+              typeof progressState.max_possible_score === "number"
+                ? progressState.max_possible_score
+                : 0,
+          });
+        }
         if (progressState.status) {
           setStatus(activeId, progressState.status === "completed" ? "completed" : "in_progress");
         }
@@ -195,6 +291,9 @@ function PlayPage() {
       initialLoadDoneRef.current = true;
     });
 
+    if (activeId && getProgress()[activeId] === "completed") {
+      setCompletedChallenge(true);
+    }
     if (activeId && getProgress()[activeId] !== "completed") {
       setStatus(activeId, "in_progress");
     }
@@ -202,7 +301,7 @@ function PlayPage() {
 
   // Server-authoritative timer countdown
   useEffect(() => {
-    if (!challenge) return;
+    if (!challenge || completedChallenge) return;
 
     // Local tick for smooth UI countdown
     const localTick = setInterval(() => setRemaining((r) => (r > 0 ? r - 1 : 0)), 1000);
@@ -219,11 +318,11 @@ function PlayPage() {
       clearInterval(localTick);
       clearInterval(serverSync);
     };
-  }, [challenge]);
+  }, [challenge, completedChallenge]);
 
   // Debounced auto-save on answers or current question changes
   useEffect(() => {
-    if (!initialLoadedRef.current || !challenge) return;
+    if (!initialLoadedRef.current || !challenge || completedChallenge) return;
     setSaveStatus("saving");
     const timer = setTimeout(async () => {
       const ok = await saveProgressApi(
@@ -241,13 +340,13 @@ function PlayPage() {
     }, 800);
 
     return () => clearTimeout(timer);
-  }, [answers, current, challenge]);
+  }, [answers, current, challenge, completedChallenge]);
 
   // Unload listener for emergency auto-save
   // Uses keepalive fetch so the browser won't cancel the request on tab close.
   useEffect(() => {
     const handleUnload = () => {
-      if (challenge && initialLoadedRef.current) {
+      if (challenge && initialLoadedRef.current && !completedChallenge) {
         const token = getStudentAccessToken();
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
@@ -276,7 +375,7 @@ function PlayPage() {
       window.removeEventListener("beforeunload", handleUnload);
       handleUnload();
     };
-  }, [challenge]);
+  }, [challenge, completedChallenge]);
 
   const answered = useMemo(
     () => (challenge && challenge.questions ? challenge.questions.filter((q) => answers[q.id]?.trim()).length : 0),
@@ -329,6 +428,40 @@ function PlayPage() {
     );
   }
 
+  if (completedChallenge) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="max-w-md text-center">
+          <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-400" />
+          <h2 className="mt-4 text-xl font-semibold">{challenge.name} — Already Submitted</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            You have already submitted this challenge and it has been graded. Your answers are
+            locked and cannot be changed. Use the review page to view your submitted answers.
+          </p>
+          {completedScore && (
+            <div className="mt-4 inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400">
+              <Trophy className="h-4 w-4" /> Score: {completedScore.earned} / {completedScore.max}
+            </div>
+          )}
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={() => navigate({ to: "/review", search: { challenge: challenge.id } })}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            >
+              Review My Answers
+            </button>
+            <button
+              onClick={() => navigate({ to: "/challenges", replace: true })}
+              className="inline-flex items-center justify-center rounded-md border border-border bg-[var(--surface)] px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              Back to Challenges
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const accent = (ev && ev.accent && ACCENT_CLASSES[ev.accent]) ? ACCENT_CLASSES[ev.accent] : ACCENT_CLASSES.blue;
   const questions = challenge.questions ?? [];
   const q = questions.length > current ? questions[current] : null;
@@ -366,15 +499,15 @@ function PlayPage() {
       sessionStorage.setItem("arena.lastCompletedChallengeSlug", challenge.id);
     }
     if (completedCount(progress) === CHALLENGES.length) {
-      navigate({ to: "/competition-complete" });
+      navigate({ to: "/competition-complete", replace: true });
     } else {
-      navigate({ to: "/challenges" });
+      navigate({ to: "/challenges", replace: true });
     }
   };
 
   const end = () => {
     if (confirm("End this challenge and return to selection?")) {
-      navigate({ to: "/challenges" });
+      navigate({ to: "/challenges", replace: true });
     }
   };
 
@@ -389,9 +522,30 @@ function PlayPage() {
     }
   };
 
-  const zoomIn = () => setZoom((z) => Math.min(2.5, +(z + 0.25).toFixed(2)));
-  const zoomOut = () => setZoom((z) => Math.max(0.5, +(z - 0.25).toFixed(2)));
-  const zoomReset = () => setZoom(challenge?.number === 5 ? 1.5 : 1);
+  const viewPos = (e: React.PointerEvent<HTMLDivElement>) =>
+    resolvePeekFocus(e.clientX, e.clientY, e.currentTarget);
+  const startPeek = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (peekReleaseTimer.current !== null) {
+      window.clearTimeout(peekReleaseTimer.current);
+      peekReleaseTimer.current = null;
+    }
+    const p = viewPos(e);
+    setPeek({ ...p, scale: 3 });
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const movePeek = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!peek) return;
+    const p = viewPos(e);
+    setPeek((prev) => (prev ? { ...p, scale: prev.scale } : prev));
+  };
+  const stopPeek = () => {
+    if (peekReleaseTimer.current !== null) {
+      window.clearTimeout(peekReleaseTimer.current);
+      peekReleaseTimer.current = null;
+    }
+    setPeek(null);
+  };
   const downloadEvidence = () => {
     if (!currentEvidence) return;
     const a = document.createElement("a");
@@ -404,7 +558,6 @@ function PlayPage() {
   const openFullscreen = () => setFullscreen(true);
   const selectEvidence = (id: string) => {
     setActiveEvidence(id);
-    setZoom(challenge?.number === 5 ? 1.5 : 1);
   };
 
 
@@ -527,23 +680,11 @@ function PlayPage() {
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           {textEntry
                             ? "Live text view — search, copy, wrap, and download."
-                            : "Click a tab to inspect each evidence file."}
+                            : "Hold / pinch anywhere on the image to zoom in; release to zoom out."}
                         </p>
                       </div>
                       {!textEntry && (
                         <div className="flex items-center gap-1">
-                          <IconBtn onClick={zoomOut} title="Zoom Out">
-                            <ZoomOut className="h-3.5 w-3.5" />
-                          </IconBtn>
-                          <span className="w-10 text-center font-mono text-[11px] text-muted-foreground">
-                            {Math.round(zoom * 100)}%
-                          </span>
-                          <IconBtn onClick={zoomIn} title="Zoom In">
-                            <ZoomIn className="h-3.5 w-3.5" />
-                          </IconBtn>
-                          <IconBtn onClick={zoomReset} title="Reset Zoom">
-                            <RotateCcw className="h-3.5 w-3.5" />
-                          </IconBtn>
                           <IconBtn onClick={openFullscreen} title="Fullscreen">
                             <Maximize2 className="h-3.5 w-3.5" />
                           </IconBtn>
@@ -583,17 +724,24 @@ function PlayPage() {
                         />
                       ) : (
                         <div
-                          ref={viewerRef}
-                          className="h-[520px] overflow-auto rounded-lg border border-border bg-[var(--surface)]"
+                          className={`h-[520px] rounded-lg border border-border bg-[var(--surface)] ${
+                            peek ? "overflow-hidden" : "overflow-auto"
+                          }`}
                         >
-                          <div 
-                            className={`flex min-h-full min-w-full p-4 transition-all duration-200 ${
-                              zoom > 1 ? "items-start justify-start" : "items-center justify-center"
-                            }`}
-                            style={{
-                              width: zoom > 1 ? `${zoom * 100}%` : "100%",
-                              height: zoom > 1 ? `${zoom * 100}%` : "100%",
-                            }}
+                          <div
+                          ref={inlineViewerRef}
+                          onPointerDown={startPeek}
+                          onPointerMove={movePeek}
+                          onPointerUp={stopPeek}
+                          onPointerCancel={stopPeek}
+                          title="Press and hold to magnify · release to zoom back out"
+                          className={`relative h-full w-full touch-none select-none overflow-hidden ${
+                            peek ? "cursor-zoom-out" : "cursor-zoom-in"
+                          }`}
+                        >
+                          <div
+                            className="absolute inset-0 flex items-center justify-center p-4 will-change-transform"
+                            style={peekStyle}
                           >
                             <img
                               src={currentImage}
@@ -606,6 +754,7 @@ function PlayPage() {
                             />
                           </div>
                         </div>
+                      </div>
                       )}
                     </div>
                   </>
@@ -793,18 +942,6 @@ function PlayPage() {
               <span className="text-xs text-muted-foreground">{currentEvidence.filename}</span>
             </div>
             <div className="flex items-center gap-1">
-              <IconBtn onClick={zoomOut} title="Zoom Out">
-                <ZoomOut className="h-3.5 w-3.5" />
-              </IconBtn>
-              <span className="w-10 text-center font-mono text-[11px] text-muted-foreground">
-                {Math.round(zoom * 100)}%
-              </span>
-              <IconBtn onClick={zoomIn} title="Zoom In">
-                <ZoomIn className="h-3.5 w-3.5" />
-              </IconBtn>
-              <IconBtn onClick={zoomReset} title="Reset Zoom">
-                <RotateCcw className="h-3.5 w-3.5" />
-              </IconBtn>
               <IconBtn onClick={downloadEvidence} title="Download">
                 <Download className="h-3.5 w-3.5" />
               </IconBtn>
@@ -816,31 +953,58 @@ function PlayPage() {
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-auto p-6">
-            <div 
-              className={`flex min-h-full min-w-full transition-all duration-200 ${
-                zoom > 1 ? "items-start justify-start" : "items-center justify-center"
+          <div
+            className={`flex-1 ${peek ? "overflow-hidden" : "overflow-auto"}`}
+          >
+            <div
+              ref={fullscreenViewerRef}
+              onPointerDown={startPeek}
+              onPointerMove={movePeek}
+              onPointerUp={stopPeek}
+              onPointerCancel={stopPeek}
+              title="Press and hold to magnify · release to zoom back out"
+              className={`relative h-full w-full touch-none select-none overflow-hidden ${
+                peek ? "cursor-zoom-out" : "cursor-zoom-in"
               }`}
-              style={{
-                width: zoom > 1 ? `${zoom * 100}%` : "100%",
-                height: zoom > 1 ? `${zoom * 100}%` : "100%",
-              }}
             >
-              <img
-                src={currentImage}
-                alt={currentEvidence.label}
-                style={{
-                  maxWidth: "100%",
-                  maxHeight: "100%",
-                }}
-                className="rounded-md object-contain"
-              />
+              <div
+                className="absolute inset-0 flex items-center justify-center p-6 will-change-transform"
+                style={peekStyle}
+              >
+                <img
+                  src={currentImage}
+                  alt={currentEvidence.label}
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "100%",
+                  }}
+                  className="rounded-md object-contain"
+                />
+              </div>
             </div>
           </div>
         </div>
       )}
     </main>
   );
+}
+
+function useImageZoomWheel(
+  onZoomStep: (e: WheelEvent, el: HTMLDivElement) => void,
+  active = true
+): React.RefObject<HTMLDivElement | null> {
+  const onZoomStepRef = useRef(onZoomStep);
+  onZoomStepRef.current = onZoomStep;
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!active) return;
+    const el = ref.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => onZoomStepRef.current(e, el);
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, [active]);
+  return ref;
 }
 
 function IconBtn({

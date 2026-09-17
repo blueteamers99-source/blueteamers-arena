@@ -15,6 +15,11 @@ class Evidence(BaseModel):
         PNG = "PNG", "PNG Image"
 
     challenge = models.ForeignKey(Challenge, on_delete=models.CASCADE, related_name="evidence_files")
+    position = models.PositiveIntegerField(
+        default=0,
+        db_index=True,
+        help_text="Display order of the evidence within its challenge (0 = first resource shown).",
+    )
     artifact_key = models.CharField(max_length=100, db_index=True)
     label = models.CharField(max_length=150)
     filename = models.CharField(max_length=150)
@@ -28,6 +33,7 @@ class Evidence(BaseModel):
         verbose_name_plural = "Evidence Files"
         ordering = ["created_at"]
         unique_together = ["challenge", "artifact_key"]
+        ordering = ["position", "created_at"]
         indexes = [
             models.Index(fields=["challenge", "artifact_key"]),
             models.Index(fields=["file_format"]),

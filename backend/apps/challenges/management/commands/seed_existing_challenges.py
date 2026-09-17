@@ -547,8 +547,9 @@ class Command(BaseCommand):
             action_str = "Created" if created else "Updated"
             self.stdout.write(f"  [+] {action_str} Challenge {challenge.challenge_number}: {challenge.name} ({challenge.slug})")
 
-            # Seed Evidence Files
-            for ev_item in item.get("evidence", []):
+            # Seed Evidence Files (position = canonical resource order; the
+            # first evidence entry opens by default in the student workspace)
+            for ev_pos, ev_item in enumerate(item.get("evidence", [])):
                 art_key = ev_item["id"]
                 txt_info = EVIDENCE_TEXT_DATA.get(art_key)
                 content_text = txt_info["content"] if txt_info else ""
@@ -564,6 +565,7 @@ class Command(BaseCommand):
                         "content_text": content_text,
                         "image_url": ev_item["image"],
                         "file_size_display": ev_item.get("size", "4 KB"),
+                        "position": ev_pos,
                     }
                 )
 

@@ -19,12 +19,12 @@ class AutoGradingService:
             )
 
         total_score_earned = 0
-        max_possible_score = 0
+        linked_points_total = 0
         evaluation_logs = []
 
         for cq in challenge_questions:
             q = cq.question
-            max_possible_score += q.default_points
+            linked_points_total += q.default_points
 
             student_ans = submitted_answers.get(str(q.id))
             if student_ans is None:
@@ -63,6 +63,16 @@ class AutoGradingService:
                 "score_multiplier": score_multiplier,
                 "feedback_note": note,
             })
+
+        # Authoritative challenge maximum: use Challenge.points so the max is a
+        # fixed, per-challenge value identical for every participant - it must
+        # never drift with whatever questions happen to be linked (that caused
+        # different users to see e.g. 170 vs 100 for the same PhishNet challenge).
+        # Fall back to the linked-question total only if the challenge has no
+        # points configured.
+        max_possible_score = (getattr(challenge, "points", None) or 0) or linked_points_total
+        # Invariant: a submission can never award more than the maximum.
+        total_score_earned = min(total_score_earned, max_possible_score)
 
         passing_pct = getattr(challenge, 'passing_percentage', 60) or 60
         passing_threshold = int(max_possible_score * (passing_pct / 100))

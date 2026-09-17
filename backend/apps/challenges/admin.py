@@ -25,9 +25,10 @@ class ChallengeAdmin(admin.ModelAdmin):
 
 @admin.register(Evidence)
 class EvidenceAdmin(admin.ModelAdmin):
-    list_display = ("challenge", "label", "artifact_key", "file_format", "filename", "created_at")
+    list_display = ("challenge", "position", "label", "artifact_key", "file_format", "filename", "created_at")
     list_filter = ("file_format", "challenge")
     search_fields = ("label", "filename", "artifact_key", "content_text")
+    list_editable = ("position",)
 
 
 @admin.register(ChallengeQuestion)

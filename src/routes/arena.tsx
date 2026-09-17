@@ -97,7 +97,7 @@ function Arena() {
                   console.warn('Clipboard read failed', err);
                 }
               }}
-              placeholder="e.g. CBIT-3154 or JNTU-6227"
+              placeholder="Please enter your event code"
               disabled={loading || success}
               className="w-full rounded-xl border border-border/80 bg-background px-4 py-3 font-mono text-center text-lg font-bold tracking-widest text-primary uppercase placeholder:normal-case placeholder:font-sans placeholder:text-sm placeholder:tracking-normal placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 shadow-inner transition-all"
               autoFocus

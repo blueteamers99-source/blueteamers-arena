@@ -28,6 +28,7 @@ import ChallengesPage from "@/components/ChallengesPage";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { API_BASE_URL } from "@/lib/config";
 import { studentAuthFetch } from "@/lib/auth";
+import { useEventCountdown } from "@/lib/useEventCountdown";
 import { asString, extractRankings, extractResults, isRecord } from "@/lib/api-types";
 import type {
   CertificateResponse,
@@ -102,7 +103,7 @@ const sidebarItems = [
 ];
 
 const rules = [
-  "20 Challenges",
+  "5 Challenges",
   "60 Minutes Duration",
   "One Attempt Only",
   "No Page Refresh / Back",
@@ -165,6 +166,11 @@ function Dashboard() {
   const [collapsed, setCollapsed] = useState(false);
   const [name, setName] = useState("Rahul");
   const [ev, setEv] = useState<MockEvent>(() => getSelectedEvent());
+
+  // Single live event countdown, shared with the Challenges list so both
+  // screens show the same remaining time (was previously two hardcoded, and
+  // divergent, placeholder values).
+  const { formatted: eventTimeLeft } = useEventCountdown();
 
   // Live state from PostgreSQL
   const [dashboardData, setDashboardData] = useState<StudentDashboard | null>(null);
@@ -446,7 +452,7 @@ function Dashboard() {
                 <div className="rounded-xl border border-border/80 bg-[var(--surface)] p-4 px-6 text-center shadow-inner backdrop-blur-sm min-w-[140px]">
                   <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Time Left</div>
                   <div className="mt-1.5 flex items-center justify-center gap-2 text-2xl font-extrabold tracking-tight sm:text-3xl text-foreground">
-                    <Clock className={`h-5 w-5 animate-pulse ${accent.text}`} /> 60:00
+                    <Clock className={`h-5 w-5 animate-pulse ${accent.text}`} /> {eventTimeLeft}
                   </div>
                   <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">Minutes</div>
                 </div>
