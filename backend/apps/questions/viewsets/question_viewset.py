@@ -12,7 +12,7 @@ class QuestionViewSet(viewsets.ModelViewSet):
 
     def get_serializer_class(self):
         if "admin" in getattr(self.request, "path", "") or self.action in ["create", "update", "partial_update", "destroy"] or (
-            self.request.user and self.request.user.is_authenticated and (self.request.user.is_staff or getattr(self.request.user, "is_admin_role", False))
+            self.request.user and self.request.user.is_authenticated and getattr(self.request.user, "is_admin_role", False)
         ):
             return AdminQuestionSerializer
         return PublicQuestionSerializer

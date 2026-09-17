@@ -25,7 +25,16 @@ import {
   FileText,
 } from "lucide-react";
 import ChallengesPage from "@/components/ChallengesPage";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { API_BASE_URL } from "@/lib/config";
+import { studentAuthFetch } from "@/lib/auth";
+import { asString, extractRankings, extractResults, isRecord } from "@/lib/api-types";
+import type {
+  CertificateResponse,
+  ChallengeListItem,
+  LeaderboardEntry,
+  StudentDashboard,
+} from "@/lib/api-types";
 import {
   ACCENT_CLASSES,
   getSelectedEvent,
@@ -48,8 +57,29 @@ type DashboardSearch = {
   tab?: string;
 };
 
-export const Route = createFileRoute("/dashboard")({
-  validateSearch: (search: Record<string, unknown>): DashboardSearch => ({
+// Authenticated certificate PDF download: plain <a href> cannot attach the
+// Authorization header the backend requires, so fetch as a blob instead.
+async function downloadCertificatePdf(certificateId: string): Promise<void> {
+  const res = await studentAuthFetch(`${API_BASE_URL}/certificate/download/${certificateId}/`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || "Certificate download failed. Please re-enter your event code and try again.");
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match?.[1] || `certificate_${certificateId}.pdf`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export const Route = createFileRoute("/dashboard")({ validateSearch: (search: Record<string, unknown>): DashboardSearch => ({
     tab: (search?.tab as string) || undefined,
   }),
   component: Dashboard,
@@ -79,18 +109,7 @@ const rules = [
   "Auto Submit on Timeout",
 ];
 
-const podium = [
-  { rank: 1, medal: "🥇", name: "Rahul", score: 950, time: "1:42:18", color: "#F59E0B", border: "border-amber-500/60", bg: "from-amber-500/10 via-card to-card" },
-  { rank: 2, medal: "🥈", name: "Akhil", score: 910, time: "1:45:07", color: "#9CA3AF", border: "border-slate-400/40", bg: "from-slate-400/10 via-card to-card" },
-  { rank: 3, medal: "🥉", name: "Sanjay", score: 890, time: "1:48:12", color: "#B45309", border: "border-amber-700/40", bg: "from-amber-700/10 via-card to-card" },
-];
 
-const tableRows = [
-  { rank: 4, student: "Anjali", challenges: "5/5", score: 870, time: "1:49:52", status: "Completed" },
-  { rank: 5, student: "Kiran", challenges: "5/5", score: 850, time: "1:52:41", status: "Completed" },
-  { rank: 6, student: "Priya", challenges: "4/5", score: 720, time: "—", status: "Running" },
-  { rank: 7, student: "Rohith", challenges: "3/5", score: 610, time: "—", status: "Running" },
-];
 
 type LeaderboardFilter = "All" | "Completed" | "Running";
 
@@ -126,17 +145,32 @@ function Dashboard() {
       search: { tab: tabId === "Dashboard" ? undefined : tabId },
     });
   };
+  // Server-authoritative certificate eligibility check.
+  // The backend (CertificateViewSet) decides whether the certificate is
+  // unlocked — the client never generates or gates a certificate itself.
+  const handleOpenCertificate = () => {
+    setCertPanelOpen(true);
+    setCertLoading(true);
+    studentAuthFetch(`${API_BASE_URL}/certificate/`)
+      .then((res) => res.json())
+      .then((data) => setCertData(data))
+      .catch(() => setCertData(null))
+      .finally(() => setCertLoading(false));
+  };
+
   const [rulesOpen, setRulesOpen] = useState(false);
-  const [certificateOpen, setCertificateOpen] = useState(false);
+  const [certPanelOpen, setCertPanelOpen] = useState(false);
+  const [certData, setCertData] = useState<CertificateResponse | null>(null);
+  const [certLoading, setCertLoading] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [name, setName] = useState("Rahul");
   const [ev, setEv] = useState<MockEvent>(() => getSelectedEvent());
 
   // Live state from PostgreSQL
-  const [dashboardData, setDashboardData] = useState<any>(null);
-  const [challengeList, setChallengeList] = useState<any[]>([]);
-  const [leaderboardItems, setLeaderboardItems] = useState<any[]>([]);
-  const [selectedChallenge, setSelectedChallenge] = useState<any | null>(null);
+  const [dashboardData, setDashboardData] = useState<StudentDashboard | null>(null);
+  const [challengeList, setChallengeList] = useState<ChallengeListItem[]>([]);
+  const [leaderboardItems, setLeaderboardItems] = useState<LeaderboardEntry[]>([]);
+  const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
   const [challengeSearch, setChallengeSearch] = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("All");
 
@@ -153,41 +187,38 @@ function Dashboard() {
     }
 
     setEv(getSelectedEvent());
-    const token = typeof localStorage !== "undefined" ? localStorage.getItem("student_access_token") : null;
     const userEmail = typeof localStorage !== "undefined" ? localStorage.getItem("user_email") : null;
-
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
 
     const meUrl = userEmail ? `${API_BASE_URL}/dashboard/me/?email=${encodeURIComponent(userEmail)}` : `${API_BASE_URL}/dashboard/me/`;
 
-    fetch(meUrl, { headers })
+    studentAuthFetch(meUrl)
       .then((res) => res.json())
-      .then((resData) => {
-        if (resData && (resData.name || resData.data)) {
-          const d = resData.data || resData;
-          setDashboardData(resData);
-          if (resData.name || d.name) setName(resData.name || d.name);
-          if (Array.isArray(d.challenges)) setChallengeList(d.challenges);
+      .then((resData: unknown) => {
+        if (resData && (isRecord(resData) && (resData.name || resData.data))) {
+          setDashboardData(resData as unknown as StudentDashboard);
+          if (resData.name) setName(asString(resData.name, "Rahul"));
         }
       })
       .catch((err) => console.error("Error fetching student dashboard me:", err));
 
-    fetch(`${API_BASE_URL}/challenges/`, { headers })
+    studentAuthFetch(`${API_BASE_URL}/challenges/`)
       .then((res) => res.json())
-      .then((resData) => {
-        const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
-        if (Array.isArray(list) && list.length > 0) {
+      .then((resData: unknown) => {
+        const list = extractResults<ChallengeListItem>(resData);
+        if (list.length > 0) {
           setChallengeList(list);
         }
       })
       .catch(() => {});
 
-    fetch(`${API_BASE_URL}/leaderboard/`, { headers })
-      .then((res) => res.json())
-      .then((resData) => {
-        const list = resData.data?.leaderboard || resData.leaderboard || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
-        if (Array.isArray(list)) {
+    studentAuthFetch(`${API_BASE_URL}/leaderboard/`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch leaderboard");
+        return res.json();
+      })
+      .then((resData: unknown) => {
+        const list = extractRankings<LeaderboardEntry>(resData);
+        if (list.length > 0) {
           setLeaderboardItems(list);
         }
       })
@@ -195,8 +226,8 @@ function Dashboard() {
   }, []);
 
   const filteredChallenges = useMemo(() => {
-    return challengeList.filter((c: any) => {
-      const title = String(c.title || c.name || "").toLowerCase();
+    return challengeList.filter((c) => {
+      const title = String(c.name || "").toLowerCase();
       const desc = String(c.description || "").toLowerCase();
       const q = challengeSearch.toLowerCase();
       const matchSearch = !q || title.includes(q) || desc.includes(q);
@@ -208,12 +239,13 @@ function Dashboard() {
   }, [challengeList, challengeSearch, filterDifficulty]);
 
   const filteredLeaderboardRows = useMemo(() => {
-    return leaderboardItems.map((p: any, idx: number) => ({
-      rank: idx + 1,
-      student: p.name || p.participant_name || "Student",
-      challenges: `${p.completed || 0}/5`,
-      score: p.score || 0,
-      time: p.time_taken || "--:--",
+    return leaderboardItems.map((p) => ({
+      // Server-computed rank (ordered by score); never renumber after filtering.
+      rank: p.rank,
+      student: p.name,
+      challenges: `${p.completed}/5`,
+      score: p.score,
+      time: p.time_taken,
       status: p.completed > 0 ? "Completed" : "Running",
     })).filter((row) => {
       const matchesSearch = row.student.toLowerCase().includes(leaderboardSearch.toLowerCase());
@@ -224,13 +256,13 @@ function Dashboard() {
 
   const accent = { text: "text-primary", border: "border-primary", bg: "bg-primary", bgSoft: "bg-primary/10", hover: "hover:bg-primary/80" };
 
-  const handleStartChallenge = (c: any) => {
-    setActive(c.slug || c.id || "phishnet");
+  const handleStartChallenge = (c: Challenge | null) => {
+    setActive(c?.id || "phishnet");
     navigate({ to: "/challenge/play" });
   };
 
   const score = dashboardData?.score ?? dashboardData?.data?.current_score ?? 0;
-  const rankVal = dashboardData?.rank ?? dashboardData?.data?.current_rank ?? 1;
+  const rankVal = dashboardData?.rank ?? dashboardData?.data?.current_rank ?? null;
   const done = dashboardData?.completed ?? dashboardData?.data?.completed_challenges ?? 0;
   const total = dashboardData?.total ?? dashboardData?.data?.current_event?.total_challenges ?? (challengeList.length || 5);
   const progressPct = dashboardData?.progress ?? dashboardData?.data?.completion_percentage ?? 0;
@@ -238,11 +270,34 @@ function Dashboard() {
   const dashboardStats = [
     { label: "Progress", value: `${progressPct}%`, icon: BarChart3, sub: "Completion rate" },
     { label: "Score", value: String(score), icon: Flame, sub: "Points earned" },
-    { label: "Rank", value: score > 0 || done > 0 ? `#${rankVal}` : "--", icon: Trophy, sub: `/ ${ev?.participants ?? 180} Participants` },
+    { label: "Rank", value: typeof rankVal === "number" && rankVal > 0 ? `#${rankVal}` : "--", icon: Trophy, sub: `/ ${ev?.participants ?? 180} Participants` },
     { label: "Challenges", value: `${done} / ${total}`, icon: Target, sub: "Completed" },
   ];
 
-  const sortedPodium = [podium[1], podium[0], podium[2]];
+  // Build podium from real leaderboard data (top 3 by score)
+  const sortedPodium = useMemo(() => {
+    const top3 = [...leaderboardItems]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map((item, idx) => {
+        const rank = idx + 1;
+        const colors: Record<number, { medal: string; color: string; border: string; bg: string }> = {
+          1: { medal: "🥇", color: "#F59E0B", border: "border-amber-500/60", bg: "from-amber-500/10 via-card to-card" },
+          2: { medal: "🥈", color: "#9CA3AF", border: "border-slate-400/40", bg: "from-slate-400/10 via-card to-card" },
+          3: { medal: "🥉", color: "#B45309", border: "border-amber-700/40", bg: "from-amber-700/10 via-card to-card" },
+        };
+        return {
+          rank,
+          ...colors[rank],
+          name: item.name,
+          score: item.score,
+          time: item.time_taken,
+        };
+      });
+    // Reorder for display: [2nd, 1st, 3rd]
+    if (top3.length === 3) return [top3[1], top3[0], top3[2]];
+    return top3;
+  }, [leaderboardItems]);
 
   return (
     <div className="relative min-h-screen bg-background text-foreground overflow-hidden">
@@ -290,7 +345,7 @@ function Dashboard() {
             <ul className="space-y-1.5 font-medium text-sm">
               {sidebarItems.map((item) => {
                 const isActive = activeTab === item.id;
-                const isUnlocked = !item.locked || done > 0 || (typeof localStorage !== "undefined" && localStorage.getItem("certificate_unlocked") === "true");
+                const isUnlocked = !item.locked || done >= total;
                 return (
                   <li key={item.id}>
                     <button
@@ -299,7 +354,9 @@ function Dashboard() {
                         if (item.isAction) {
                           setRulesOpen(true);
                         } else if (item.id === "Certificate") {
-                          setCertificateOpen(true);
+                          if (isUnlocked) {
+                            handleOpenCertificate();
+                          }
                         } else {
                           handleTabChange(item.id);
                         }
@@ -367,6 +424,7 @@ function Dashboard() {
         {activeTab === "Dashboard" && (
           <div className="p-6 lg:p-8 space-y-6 w-full max-w-[1600px]">
             {/* Hero Welcome Card */}
+            <ErrorBoundary label="Dashboard Hero">
             <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-card/90 p-6 sm:p-8 shadow-xl backdrop-blur-sm">
               <div className={`pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full ${accent.bgSoft} blur-3xl`} />
 
@@ -394,8 +452,10 @@ function Dashboard() {
                 </div>
               </div>
             </div>
+            </ErrorBoundary>
 
             {/* Stats 4-Grid */}
+            <ErrorBoundary label="Dashboard Stats">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               {dashboardStats.map((s) => (
                 <div
@@ -411,6 +471,7 @@ function Dashboard() {
                 </div>
               ))}
             </div>
+            </ErrorBoundary>
 
             {/* 2-Column Section */}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -506,6 +567,7 @@ function Dashboard() {
             </div>
 
             {/* Podium Top 3 Champions Section */}
+            <ErrorBoundary label="Leaderboard Podium">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:items-end">
               {sortedPodium.map((p) => {
                 const isFirst = p.rank === 1;
@@ -538,6 +600,7 @@ function Dashboard() {
                 );
               })}
             </div>
+            </ErrorBoundary>
 
             {/* Leaderboard Table (Ranks 4+) */}
             <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xl backdrop-blur-sm">
@@ -663,14 +726,12 @@ function Dashboard() {
         />
       )}
 
-      {/* Official Certificate Modal */}
-      {certificateOpen && (
+      {/* Official Certificate Panel (server-authorized) */}
+      {certPanelOpen && (
         <CertificateModal
-          name={name}
-          college={ev?.college || "CBIT"}
-          workshop={ev?.workshop || "AI with SOC Workshop"}
-          score={score || 100}
-          onClose={() => setCertificateOpen(false)}
+          certData={certData}
+          certLoading={certLoading}
+          onClose={() => setCertPanelOpen(false)}
         />
       )}
     </div>
@@ -804,7 +865,7 @@ function DetailsModal({
 
         <Section title="Resources Included">
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium text-muted-foreground">
-            {(challenge.resources || [{ name: "evidence-logs.txt" }]).map((r: any, idx: number) => (
+            {(challenge.resources || [{ name: "evidence-logs.txt" }]).map((r, idx) => (
               <li key={r.name || idx} className="flex items-center gap-2 truncate rounded-lg border border-border/40 bg-[var(--surface)] px-3 py-2">
                 <FileText className={`h-3.5 w-3.5 shrink-0 ${accentText}`} />
                 <span className="truncate text-foreground">{r.name || "Evidence file"}</span>
@@ -844,23 +905,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function CertificateModal({
-  name,
-  college,
-  workshop,
-  score,
+  certData,
+  certLoading,
   onClose,
 }: {
-  name: string;
-  college: string;
-  workshop: string;
-  score: number;
+  certData: CertificateResponse | null;
+  certLoading: boolean;
   onClose: () => void;
 }) {
-  const certId = useMemo(() => `CERT-BLUETEAM-${Math.random().toString(36).substring(2, 8).toUpperCase()}`, []);
-
-  const handlePrint = () => {
-    window.print();
-  };
+  const unlocked = !!certData?.unlocked;
 
   return (
     <div
@@ -868,7 +921,11 @@ function CertificateModal({
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-3xl rounded-3xl border-2 border-amber-500/40 bg-gradient-to-b from-card via-background to-card p-8 sm:p-12 shadow-2xl shadow-amber-500/10 backdrop-blur-xl transition-all"
+        className={`relative w-full max-w-3xl rounded-3xl border-2 p-8 sm:p-12 shadow-2xl backdrop-blur-xl transition-all ${
+          unlocked
+            ? "border-amber-500/40 bg-gradient-to-b from-card via-background to-card shadow-amber-500/10"
+            : "border-amber-500/20 bg-card"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -878,6 +935,12 @@ function CertificateModal({
           <X className="h-5 w-5" />
         </button>
 
+        {certLoading ? (
+          <div className="py-16 text-center text-sm text-muted-foreground">
+            Checking certificate eligibility…
+          </div>
+        ) : unlocked ? (
+          <>
         {/* Certificate Border Header */}
         <div className="text-center space-y-3">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-500/40 bg-amber-500/10 text-amber-400 shadow-inner">
@@ -899,21 +962,23 @@ function CertificateModal({
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
             This is proudly awarded to
           </p>
-          <h2 className="text-3xl font-black text-primary sm:text-4xl tracking-wide">
-            {name || "Rahul"}
-          </h2>
+              <h2 className="text-3xl font-black text-primary sm:text-4xl tracking-wide">
+                {certData.name || "Participant"}
+              </h2>
           <p className="max-w-xl mx-auto text-xs sm:text-sm text-muted-foreground leading-relaxed">
-            for successfully completing all SOC Investigation Challenges with distinction during the <strong className="text-foreground">{workshop}</strong> event conducted for <strong className="text-foreground">{college}</strong>.
+            for successfully completing all SOC Investigation Challenges with distinction during the{" "}
+            <strong className="text-foreground">{certData.event || "Blueteamers Arena Event"}</strong> event conducted for{" "}
+            <strong className="text-foreground">{certData.college || "your institution"}</strong>.
           </p>
 
           <div className="pt-2 flex flex-wrap items-center justify-center gap-6 text-sm font-semibold">
             <div className="rounded-xl border border-border/80 bg-card px-4 py-2">
               <span className="text-xs text-muted-foreground">Final Score: </span>
-              <span className="text-amber-400 font-bold">{score || 100} Points</span>
+                  <span className="text-amber-400 font-bold">{certData.score ?? 0} Points</span>
             </div>
             <div className="rounded-xl border border-border/80 bg-card px-4 py-2">
               <span className="text-xs text-muted-foreground">Verification ID: </span>
-              <span className="font-mono text-primary">{certId}</span>
+                  <span className="font-mono text-primary">{certData.certificate_id}</span>
             </div>
           </div>
         </div>
@@ -930,14 +995,58 @@ function CertificateModal({
             >
               Close
             </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const certId = certData.certificate_id;
+                    if (!certId) return;
+                    downloadCertificatePdf(certId).catch((err) => {
+                      console.error("Certificate download failed:", err);
+                      alert(err instanceof Error ? err.message : "Certificate download failed. Please try again.");
+                    });
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-xs font-bold text-primary-foreground shadow-md transition-all hover:bg-primary/90"
+                >
+                  <Award className="h-4 w-4" /> Download / Print Certificate
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          /* Locked state — the server decides eligibility (all challenges
+             completed AND passing score). No certificate UI is rendered. */
+          <div className="text-center space-y-4 py-10">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-muted/40 text-muted-foreground shadow-inner">
+              <Lock className="h-8 w-8" />
+            </div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
+              Certificate Locked
+            </h1>
+            <p className="max-w-md mx-auto text-sm text-muted-foreground leading-relaxed">
+              {certData?.message ||
+                "Certificate unavailable. Complete all required challenges and reach the passing score to earn your certificate."}
+            </p>
+            {typeof certData?.completed_challenges === "number" && typeof certData?.total_challenges === "number" && (
+              <div className="mx-auto w-fit rounded-xl border border-border/80 bg-card px-4 py-2 text-xs font-semibold">
+                <span className="text-muted-foreground">Progress: </span>
+                <span className="text-amber-400">
+                  {certData.completed_challenges}/{certData.total_challenges} challenges
+                </span>
+                {" · "}
+                <span className="text-muted-foreground">Score: </span>
+                <span className="text-amber-400">
+                  {certData.score ?? 0}/{certData.passing_score ?? 600} points
+                </span>
+              </div>
+            )}
             <button
-              onClick={handlePrint}
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-xs font-bold text-primary-foreground shadow-md transition-all hover:bg-primary/90"
+              onClick={onClose}
+              className="rounded-xl border border-border px-5 py-2.5 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
             >
-              <Award className="h-4 w-4" /> Download / Print Certificate
+              Close
             </button>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

@@ -89,9 +89,13 @@ function Arena() {
               }}
               onPaste={(e) => {
                 e.preventDefault();
-                const pasted = e.clipboardData.getData("text").trim().toUpperCase();
-                setCode(pasted);
-                reset();
+                try {
+                  const pasted = e.clipboardData.getData("text").trim().toUpperCase();
+                  setCode(pasted);
+                  reset();
+                } catch (err) {
+                  console.warn('Clipboard read failed', err);
+                }
               }}
               placeholder="e.g. CBIT-3154 or JNTU-6227"
               disabled={loading || success}

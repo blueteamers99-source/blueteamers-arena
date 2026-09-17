@@ -61,34 +61,55 @@ class ReportService:
         existing_texts = set(Question.objects.values_list("question_text", flat=True))
 
         for idx, item in enumerate(questions_data, start=1):
-            q_text = item.get("question_text") or item.get("question") or ""
-            if not q_text.strip():
-                errors.append(f"Row {idx}: Missing question text.")
+            try:
+                q_text = item.get("question_text") or item.get("question") or ""
+                if not q_text.strip():
+                    errors.append(f"Row {idx}: Missing question text.")
+                    continue
+
+                if q_text.strip() in existing_texts:
+                    skipped_count += 1
+                    continue
+
+                opts = item.get("options_json") or item.get("options") or []
+                if isinstance(opts, str):
+                    opts = [o.strip() for o in opts.split(",") if o.strip()]
+
+                # Safely convert correct_option_index to int
+                correct_idx_raw = item.get("correct_option_index", item.get("correct", 0))
+                try:
+                    correct_option_index = int(correct_idx_raw)
+                except (ValueError, TypeError):
+                    errors.append(f"Row {idx}: Invalid correct_option_index '{correct_idx_raw}' — must be a number.")
+                    continue
+
+                # Safely convert default_points to int
+                points_raw = item.get("default_points", item.get("marks", 10))
+                try:
+                    default_points = int(points_raw)
+                except (ValueError, TypeError):
+                    errors.append(f"Row {idx}: Invalid default_points '{points_raw}' — must be a number.")
+                    continue
+
+                Question.objects.create(
+                    category=item.get("category", Question.CategoryChoices.PHISHING),
+                    difficulty=item.get("difficulty", Question.DifficultyChoices.EASY),
+                    kind=item.get("kind", Question.QuestionKindChoices.TEXT),
+                    question_text=q_text.strip(),
+                    evidence_text=item.get("evidence_text", ""),
+                    options_json=opts,
+                    correct_answer=str(item.get("correct_answer", "")),
+                    correct_option_index=correct_option_index,
+                    explanation=item.get("explanation", ""),
+                    default_points=default_points,
+                    status=item.get("status", Question.StatusChoices.PUBLISHED),
+                )
+                existing_texts.add(q_text.strip())
+                created_count += 1
+
+            except Exception as e:
+                errors.append(f"Row {idx}: Unexpected error — {str(e)}")
                 continue
-
-            if q_text.strip() in existing_texts:
-                skipped_count += 1
-                continue
-
-            opts = item.get("options_json") or item.get("options") or []
-            if isinstance(opts, str):
-                opts = [o.strip() for o in opts.split(",") if o.strip()]
-
-            Question.objects.create(
-                category=item.get("category", Question.CategoryChoices.PHISHING),
-                difficulty=item.get("difficulty", Question.DifficultyChoices.EASY),
-                kind=item.get("kind", Question.QuestionKindChoices.TEXT),
-                question_text=q_text.strip(),
-                evidence_text=item.get("evidence_text", ""),
-                options_json=opts,
-                correct_answer=str(item.get("correct_answer", "")),
-                correct_option_index=int(item.get("correct_option_index", item.get("correct", 0))),
-                explanation=item.get("explanation", ""),
-                default_points=int(item.get("default_points", item.get("marks", 10))),
-                status=item.get("status", Question.StatusChoices.PUBLISHED),
-            )
-            existing_texts.add(q_text.strip())
-            created_count += 1
 
         return {
             "imported_count": created_count,

@@ -107,8 +107,13 @@ class EventService:
         if event.status == Event.StatusChoices.COMPLETED:
             return False, "This event has already concluded.", None
 
-        # Security Check 2: Registration Closing Date Expiry
-        if event.registration_close_at and timezone.now() > event.registration_close_at:
+        # Security Check 2: Registration Not Yet Open
+        now = timezone.now()
+        if event.registration_open_at and now < event.registration_open_at:
+            return False, "Event registration has not opened yet.", None
+
+        # Security Check 3: Registration Closing Date Expiry
+        if event.registration_close_at and now > event.registration_close_at:
             return False, "Event registration has expired.", None
 
         return True, "Event code verified successfully.", event

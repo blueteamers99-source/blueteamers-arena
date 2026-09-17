@@ -223,6 +223,7 @@ EXISTING_FIVE_CHALLENGES = [
         "difficulty": "Easy",
         "duration": 20,
         "points": 100,
+        "passing_percentage": 60,
         "category": "Phishing",
         "skills": ["Email Forensics", "Header Analysis", "URL Reputation"],
         "objectives": [
@@ -247,21 +248,14 @@ EXISTING_FIVE_CHALLENGES = [
                 "prompt": "What is the spoofed sender domain?",
                 "kind": "text",
                 "correct_answer": "payroll-secure-verify.com",
-                "points": 30,
+                "points": 50,
             },
             {
                 "id": "q2",
-                "prompt": "Identify the suspicious URL.",
-                "kind": "text",
-                "correct_answer": "http://payroll-secure-verify.com",
-                "points": 35,
-            },
-            {
-                "id": "q3",
                 "prompt": "List three phishing indicators found in this email.",
                 "kind": "text",
                 "correct_answer": "SPF fail, DMARC fail, Spoofed From header",
-                "points": 35,
+                "points": 50,
             },
         ],
     },
@@ -274,6 +268,7 @@ EXISTING_FIVE_CHALLENGES = [
         "difficulty": "Medium",
         "duration": 30,
         "points": 150,
+        "passing_percentage": 60,
         "category": "SIEM",
         "skills": ["SIEM Analysis", "Wazuh", "Log Correlation"],
         "objectives": [
@@ -333,6 +328,7 @@ EXISTING_FIVE_CHALLENGES = [
         "difficulty": "Medium",
         "duration": 25,
         "points": 100,
+        "passing_percentage": 60,
         "category": "AI",
         "skills": ["AI Tooling", "Threat Analysis", "Response Playbooks"],
         "objectives": [
@@ -391,6 +387,7 @@ EXISTING_FIVE_CHALLENGES = [
         "difficulty": "Hard",
         "duration": 35,
         "points": 250,
+        "passing_percentage": 60,
         "category": "Incident Response",
         "skills": ["Incident Response", "Triage", "Containment"],
         "objectives": [
@@ -450,6 +447,7 @@ EXISTING_FIVE_CHALLENGES = [
         "difficulty": "Hard",
         "duration": 40,
         "points": 400,
+        "passing_percentage": 60,
         "category": "Digital Forensics",
         "skills": ["Digital Forensics", "Timeline Analysis", "Threat Hunting"],
         "objectives": [
@@ -523,7 +521,7 @@ class Command(BaseCommand):
                 "workshop_name": "VRSEC National SOC Blue Team Championship 2026",
                 "college_name": "VRSEC",
                 "event_date": timezone.now().date(),
-                "passing_score": 300,
+                "passing_score": 600,
                 "total_challenges": 5,
                 "status": "Completed",
             }
@@ -540,6 +538,7 @@ class Command(BaseCommand):
                     "difficulty": item["difficulty"],
                     "duration_minutes": item["duration"],
                     "points": item["points"],
+                    "passing_percentage": item.get("passing_percentage", 60),
                     "skills": item["skills"],
                     "objectives": item["objectives"],
                 }

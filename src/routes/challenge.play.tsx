@@ -36,6 +36,9 @@ import {
   fetchChallengeDetailApi,
   type Challenge,
 } from "@/lib/mock-challenges";
+import { API_BASE_URL } from "@/lib/config";
+import { getStudentAccessToken } from "@/lib/auth";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import evidenceEmail from "@/assets/evidence-email.png";
 import evidenceUrl from "@/assets/evidence-url.png";
 import evidenceWazuh from "@/assets/evidence-wazuh.png";
@@ -45,6 +48,11 @@ import evidenceDiskSummary from "@/assets/evidence-disk-summary.png";
 import evidenceMemoryStrings from "@/assets/evidence-memory-strings.png";
 import evidenceTimeline from "@/assets/evidence-timeline.png";
 import evidenceNetworkCapture from "@/assets/evidence-network-capture.png";
+import evidenceAiSummary from "@/assets/evidence-ai-summary.png";
+import evidenceHostTelemetry from "@/assets/evidence-host-telemetry.png";
+import evidenceIrRunbook from "@/assets/evidence-ir-runbook.png";
+import evidenceEdrEvents from "@/assets/evidence-edr-events.png";
+import evidenceAuthAudit from "@/assets/evidence-auth-audit.png";
 import { EVIDENCE_TEXT } from "@/lib/evidence-text";
 import { EvidenceCodeViewer } from "@/components/EvidenceCodeViewer";
 
@@ -60,6 +68,11 @@ const EVIDENCE_URLS: Record<string, string> = {
   "/__EVIDENCE_MEMORY_STRINGS__": evidenceMemoryStrings,
   "/__EVIDENCE_TIMELINE__": evidenceTimeline,
   "/__EVIDENCE_PCAP__": evidenceNetworkCapture,
+  "/__EVIDENCE_AI_SUMMARY__": evidenceAiSummary,
+  "/__EVIDENCE_HOST_TELEMETRY__": evidenceHostTelemetry,
+  "/__EVIDENCE_IR_RUNBOOK__": evidenceIrRunbook,
+  "/__EVIDENCE_EDR_EVENTS__": evidenceEdrEvents,
+  "/__EVIDENCE_AUTH_AUDIT__": evidenceAuthAudit,
 };
 
 
@@ -68,7 +81,10 @@ export const Route = createFileRoute("/challenge/play")({
   validateSearch: (search: Record<string, unknown>): { challengeId?: string } => ({
     challengeId: (search.challengeId as string) || undefined,
   }),
-  component: PlayPage,
+  component: () => {
+    const { challengeId } = Route.useSearch();
+    return <PlayPage key={challengeId} />;
+  },
   head: () => ({
     meta: [
       { title: "Challenge Workspace — Blueteamers Arena" },
@@ -98,8 +114,11 @@ function PlayPage() {
   const [activeEvidence, setActiveEvidence] = useState<string>("");
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
+
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const initialLoadedRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
   const answersRef = useRef(answers);
   answersRef.current = answers;
   const currentRef = useRef(current);
@@ -119,9 +138,16 @@ function PlayPage() {
     setRemaining(localChallenge.duration * 60);
     if (localChallenge.evidence?.length) setActiveEvidence(localChallenge.evidence[0].id);
     setZoom(localChallenge.number === 5 ? 1.5 : 1);
+    setAccessDenied(false);
 
-    // 1. Fetch live challenge definition if available
-    fetchChallengeDetailApi(activeId).then((serverChall) => {
+    // 1. Fetch live challenge definition if available.
+    // A 403 means the backend rejected cross-event access — show the
+    // access-denied state instead of falling back to mock content.
+    fetchChallengeDetailApi(activeId).then(({ challenge: serverChall, forbidden }) => {
+      if (forbidden) {
+        setAccessDenied(true);
+        return;
+      }
       if (serverChall) {
         setChallenge(serverChall);
       }
@@ -146,20 +172,16 @@ function PlayPage() {
         } else if (progressState.draft_answers && typeof progressState.draft_answers === "object") {
           for (const [k, v] of Object.entries(progressState.draft_answers)) {
             if (v && typeof v === "object" && "answer_text" in v) {
-              restoredAnswers[k] = (v as any).answer_text || "";
+              const inner = v as { answer_text?: unknown };
+              restoredAnswers[k] = typeof inner.answer_text === "string" ? inner.answer_text : "";
             } else if (v !== undefined && v !== null) {
               restoredAnswers[k] = String(v);
             }
           }
         }
 
-        if (Object.keys(restoredAnswers).length > 0) {
-          setAnswers((prev) => ({ ...prev, ...restoredAnswers }));
-        }
-
-        // Restore question index
-        if (typeof progressState.current_question_index === "number" && progressState.current_question_index >= 0) {
-          setCurrent(progressState.current_question_index);
+        if (Object.keys(restoredAnswers).length > 0 && !initialLoadDoneRef.current) {
+          setAnswers(restoredAnswers);
         }
 
         if (progressState.status) {
@@ -167,8 +189,10 @@ function PlayPage() {
         }
       }
       initialLoadedRef.current = true;
+      initialLoadDoneRef.current = true;
     }).catch(() => {
       initialLoadedRef.current = true;
+      initialLoadDoneRef.current = true;
     });
 
     if (activeId && getProgress()[activeId] !== "completed") {
@@ -179,8 +203,22 @@ function PlayPage() {
   // Server-authoritative timer countdown
   useEffect(() => {
     if (!challenge) return;
-    const id = setInterval(() => setRemaining((r) => (r > 0 ? r - 1 : 0)), 1000);
-    return () => clearInterval(id);
+
+    // Local tick for smooth UI countdown
+    const localTick = setInterval(() => setRemaining((r) => (r > 0 ? r - 1 : 0)), 1000);
+
+    // Periodic server sync to correct drift across tabs / background throttling
+    const serverSync = setInterval(async () => {
+      const progress = await fetchProgressApi(challenge.id);
+      if (progress && typeof progress.remaining_time_seconds === "number") {
+        setRemaining(progress.remaining_time_seconds);
+      }
+    }, 10000); // Sync every 10 seconds
+
+    return () => {
+      clearInterval(localTick);
+      clearInterval(serverSync);
+    };
   }, [challenge]);
 
   // Debounced auto-save on answers or current question changes
@@ -206,15 +244,31 @@ function PlayPage() {
   }, [answers, current, challenge]);
 
   // Unload listener for emergency auto-save
+  // Uses keepalive fetch so the browser won't cancel the request on tab close.
   useEffect(() => {
     const handleUnload = () => {
       if (challenge && initialLoadedRef.current) {
-        saveProgressApi(
-          challenge.id,
-          answersRef.current,
-          currentRef.current,
-          Object.keys(answersRef.current),
-        );
+        const token = getStudentAccessToken();
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+        try {
+          fetch(`${API_BASE_URL}/challenges/${challenge.id}/save-progress/`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              answers: answersRef.current,
+              current_question_index: currentRef.current,
+              visited_questions: Object.keys(answersRef.current),
+            }),
+            keepalive: true,
+          });
+        } catch {
+          // Best-effort save on page unload — nothing we can do if it fails
+        }
       }
     };
     window.addEventListener("beforeunload", handleUnload);
@@ -228,6 +282,35 @@ function PlayPage() {
     () => (challenge && challenge.questions ? challenge.questions.filter((q) => answers[q.id]?.trim()).length : 0),
     [answers, challenge],
   );
+
+  // Auto-redirect to arena when the backend denies cross-event access.
+  useEffect(() => {
+    if (!accessDenied) return;
+    const id = setTimeout(() => navigate({ to: "/arena" }), 4000);
+    return () => clearTimeout(id);
+  }, [accessDenied, navigate]);
+
+  if (accessDenied) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="max-w-md text-center">
+          <AlertTriangle className="mx-auto h-12 w-12 text-amber-400" />
+          <h2 className="mt-4 text-xl font-semibold">Challenge Not Available</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            This challenge is not part of your registered event. You can only access challenges
+            belonging to the event you joined with your event code.
+          </p>
+          <button
+            onClick={() => navigate({ to: "/arena" })}
+            className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+          >
+            Back to Arena
+          </button>
+          <p className="mt-3 text-xs text-muted-foreground">Redirecting automatically...</p>
+        </div>
+      </main>
+    );
+  }
 
   if (!ev || !challenge) {
     return (
@@ -258,10 +341,30 @@ function PlayPage() {
     : "";
 
   const submit = async () => {
-    setStatus(challenge.id, "completed");
-    await submitChallengeApi(challenge.id, answers);
+    // Guard: prevent submitting with no answers at all.
+    if (questions.length > 0 && answered === 0) {
+      alert("You must answer at least one question before submitting. Unanswered questions are marked as incorrect.");
+      return;
+    }
+    // Guard: warn when some questions are still unanswered — they will be
+    // graded as incorrect (0 points).
+    if (questions.length > 0 && answered < questions.length) {
+      const okToSubmit = confirm(
+        `You have answered ${answered} of ${questions.length} questions. Unanswered questions will be marked as incorrect. Submit anyway?`,
+      );
+      if (!okToSubmit) return;
+    }
+    const result = await submitChallengeApi(challenge.id, answers);
+    if (result && result.success === false) {
+      alert(result.message || "Submission failed. Please try again.");
+      return;
+    }
     const progress = getProgress();
     progress[challenge.id] = "completed";
+    // Store the completed challenge slug for the review page
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem("arena.lastCompletedChallengeSlug", challenge.id);
+    }
     if (completedCount(progress) === CHALLENGES.length) {
       navigate({ to: "/competition-complete" });
     } else {
@@ -389,11 +492,31 @@ function PlayPage() {
         </aside>
 
         {/* Center */}
+        <ErrorBoundary label="Challenge Workspace">
         <section className="space-y-4">
           {evidence.length > 0 && currentEvidence ? (
             <Panel>
               {(() => {
-                const textEntry = EVIDENCE_TEXT[currentEvidence.id];
+                const textEntry =
+                  EVIDENCE_TEXT[currentEvidence.id] ??
+                  // Hardening: if the evidence image token has no bundled asset
+                  // mapping, fall back to the backend-provided content_text so
+                  // the tab never renders a broken image placeholder.
+                  (currentEvidence.content_text &&
+                  !EVIDENCE_URLS[currentEvidence.image] &&
+                  ["txt", "json", "csv", "log"].includes(
+                    String(currentEvidence.file_format || "").toLowerCase()
+                  )
+                    ? {
+                        filename: currentEvidence.filename,
+                        format: String(currentEvidence.file_format).toLowerCase() as
+                          | "txt"
+                          | "json"
+                          | "csv"
+                          | "log",
+                        content: currentEvidence.content_text,
+                      }
+                    : undefined);
                 return (
                   <>
                     <div className="mb-3 flex items-center justify-between gap-3">
@@ -617,6 +740,7 @@ function PlayPage() {
             )}
           </div>
         </section>
+        </ErrorBoundary>
 
         {/* Right sidebar */}
         <aside className="space-y-4">

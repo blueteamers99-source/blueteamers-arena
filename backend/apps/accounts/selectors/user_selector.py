@@ -30,7 +30,10 @@ class UserSelector:
     @staticmethod
     def get_valid_password_reset_token(token_str: str) -> Optional[PasswordResetToken]:
         try:
-            token_obj = PasswordResetToken.objects.get(token=token_str, is_used=False)
+            token_obj = PasswordResetToken.objects.get(
+                token=PasswordResetToken.hash_token(token_str),
+                is_used=False,
+            )
             if token_obj.is_valid:
                 return token_obj
             return None

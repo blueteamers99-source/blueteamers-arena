@@ -66,11 +66,15 @@ export default function EventDetailsPage() {
     navigate({ to: "/student" });
   };
 
-  const handleCopyCode = () => {
+  const handleCopyCode = async () => {
     if (ev?.code) {
-      navigator.clipboard.writeText(ev.code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      try {
+        await navigator.clipboard.writeText(ev.code);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        console.warn('Clipboard write failed', err);
+      }
     }
   };
 
@@ -213,11 +217,11 @@ export default function EventDetailsPage() {
               <div className="grid gap-4 sm:grid-cols-3 text-center">
                 <div className="rounded-xl border border-border/60 bg-[var(--surface)] p-4">
                   <div className="text-xs font-semibold uppercase text-muted-foreground">Total Score</div>
-                  <div className="mt-1 text-2xl font-extrabold text-foreground">{ev.totalScore || 500} Pts</div>
+                  <div className="mt-1 text-2xl font-extrabold text-foreground">{ev.totalScore || 1000} Pts</div>
                 </div>
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
                   <div className="text-xs font-semibold uppercase text-emerald-400">Passing Score</div>
-                  <div className="mt-1 text-2xl font-extrabold text-emerald-400">{ev.passingScore || 350} Pts</div>
+                  <div className="mt-1 text-2xl font-extrabold text-emerald-400">{ev.passingScore || 600} Pts</div>
                 </div>
                 <div className="rounded-xl border border-border/60 bg-[var(--surface)] p-4">
                   <div className="text-xs font-semibold uppercase text-muted-foreground">Certificate</div>
@@ -255,7 +259,7 @@ export default function EventDetailsPage() {
                   <DetailRow icon={<Building2 className="h-4 w-4 text-primary" />} label="College" value={ev.college} />
                   <DetailRow icon={<KeyRound className="h-4 w-4 text-primary" />} label="Event Code" value={<span className="font-mono font-bold text-primary">{ev.code}</span>} />
                   <DetailRow icon={<Users className="h-4 w-4 text-indigo-400" />} label="Max Students" value={String(ev.maxStudents || 250)} />
-                  <DetailRow icon={<Trophy className="h-4 w-4 text-amber-400" />} label="Pass Score" value={`${ev.passingScore || 350} / ${ev.totalScore || 500}`} />
+                  <DetailRow icon={<Trophy className="h-4 w-4 text-amber-400" />} label="Pass Score" value={`${ev.passingScore || 600} / ${ev.totalScore || 1000}`} />
                   <DetailRow icon={<Award className="h-4 w-4 text-emerald-400" />} label="Certificate" value={ev.certificateAvailable ? "Available" : "Not Available"} />
                 </div>
 

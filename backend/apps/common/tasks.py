@@ -1,5 +1,5 @@
 import logging
-from datetime import date
+from datetime import timedelta
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
@@ -52,7 +52,7 @@ def send_reminder_emails_task(self):
     """
     Sends reminder emails for upcoming events starting today.
     """
-    today = date.today()
+    today = timezone.localdate()
     upcoming_events = Event.objects.filter(status=Event.StatusChoices.UPCOMING, event_date=today)
     sent_count = 0
     for ev in upcoming_events:
@@ -78,7 +78,7 @@ def scheduled_event_publish_task():
     Automatically publishes scheduled events whose registration window or date has arrived.
     """
     now = timezone.now()
-    today = date.today()
+    today = timezone.localdate()
     events_to_publish = Event.objects.filter(
         status=Event.StatusChoices.UPCOMING,
         auto_publish=True,
@@ -100,13 +100,23 @@ def scheduled_event_publish_task():
 @shared_task
 def scheduled_event_close_task():
     """
-    Automatically closes events whose duration or end date has passed.
+    Automatically closes events whose duration has elapsed.
+    Calculates end time as event_date + duration_minutes.
     """
-    today = date.today()
+    now = timezone.now()
     live_events = Event.objects.filter(status=Event.StatusChoices.LIVE, auto_close=True)
     count = 0
     for ev in live_events:
-        if ev.event_date < today:
+        # Assume event starts at beginning of event_date, in the configured
+        # timezone so it compares correctly against the UTC-aware `now`.
+        tz = timezone.get_current_timezone()
+        event_start = timezone.make_aware(
+            timezone.datetime.combine(ev.event_date, timezone.datetime.min.time()),
+            timezone=tz,
+        )
+        event_end = event_start + timedelta(minutes=ev.duration_minutes or 60)
+
+        if now > event_end:
             ev.status = Event.StatusChoices.COMPLETED
             ev.save()
             count += 1

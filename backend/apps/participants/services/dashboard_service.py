@@ -11,12 +11,18 @@ class DashboardService:
         event = participant.event
         total_challenges = event.total_challenges or Challenge.objects.count()
 
-        # Calculate student rank in event
-        higher_score_count = Participant.objects.filter(
-            event=event,
-            score__gt=participant.score,
-        ).count()
-        current_rank = higher_score_count + 1
+        # Calculate student rank in event — only ranked if the participant
+        # passed (score >= passing AND all challenges completed). Otherwise no rank.
+        passing_score = event.passing_score or 0
+        is_ranked = participant.score >= passing_score and participant.completed >= total_challenges
+        if is_ranked:
+            higher_score_count = Participant.objects.filter(
+                event=event,
+                score__gt=participant.score,
+            ).count()
+            current_rank = higher_score_count + 1
+        else:
+            current_rank = None
 
         # Calculate progress stats
         progresses = ParticipantProgress.objects.filter(participant=participant)
@@ -29,7 +35,7 @@ class DashboardService:
 
         # Recent activity timeline
         recent_activity = []
-        for p in progresses.order_by("-updated_at")[:5]:
+        for p in progresses.select_related("challenge").order_by("-updated_at")[:5]:
             recent_activity.append({
                 "challenge": p.challenge.name,
                 "status": p.status,

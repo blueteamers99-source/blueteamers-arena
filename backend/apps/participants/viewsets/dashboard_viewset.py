@@ -1,43 +1,28 @@
+import logging
+
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny
 from drf_spectacular.utils import extend_schema
 from apps.common.utils.response import success_response
-from apps.participants.models.participant import Participant
 from apps.participants.auth.participant_auth import ParticipantTokenAuthentication
 from apps.participants.permissions.is_participant import IsParticipant
 from apps.participants.services.dashboard_service import DashboardService
 from apps.participants.serializers.dashboard_serializer import DashboardSerializer
 
+logger = logging.getLogger(__name__)
+
 
 class DashboardViewSet(viewsets.ViewSet):
     authentication_classes = [ParticipantTokenAuthentication]
-    permission_classes = [AllowAny]
+    permission_classes = [IsParticipant]
 
     def _resolve_participant(self, request):
-        # 1. From ParticipantTokenAuthentication / request.user
-        participant = getattr(request, "participant", None)
-        if not participant and hasattr(request, "user") and request.user:
-            participant = getattr(request.user, "participant", None)
-        if participant:
-            return participant
-
-        # 2. From JWT headers / Bearer token payload
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
-            try:
-                import jwt
-                from django.conf import settings
-                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-                p_id = payload.get("participant_id")
-                if p_id:
-                    return Participant.objects.filter(id=p_id).first()
-            except Exception:
-                pass
-
-        return None
+        """
+        Returns the authenticated participant via DRF auth.
+        No manual JWT decode, no fallback chain.
+        """
+        return getattr(request, "participant", None)
 
     @extend_schema(responses={200: DashboardSerializer})
     def list(self, request):
@@ -68,6 +53,6 @@ class DashboardViewSet(viewsets.ViewSet):
             status=status.HTTP_200_OK,
         )
 
-    @action(detail=False, methods=["get"], url_path="me", permission_classes=[AllowAny])
+    @action(detail=False, methods=["get"], url_path="me")
     def me(self, request):
         return self.list(request)

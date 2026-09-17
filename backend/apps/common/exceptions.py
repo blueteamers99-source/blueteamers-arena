@@ -1,4 +1,5 @@
 import logging
+import uuid
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from rest_framework import status
@@ -56,10 +57,14 @@ def custom_exception_handler(exc, context):
             status_code=response.status_code,
         )
 
-    # Unhandled 500 Internal Server Errors
-    logger.error(f"Unhandled exception in API request: {exc}", exc_info=True)
+    # Unhandled 500 Internal Server Errors.
+    # The exception detail is logged server-side for debugging but is never
+    # returned to the client, which would leak internal paths/SQL/stack info.
+    # A correlation ID lets support link a user report to the server logs.
+    error_id = str(uuid.uuid4())
+    logger.error(f"[{error_id}] Unhandled exception in API request: {exc}", exc_info=True)
     return error_response(
         message="Internal server error. Please contact system support.",
-        errors={"detail": str(exc)},
+        errors={"error_id": error_id},
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )

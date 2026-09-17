@@ -2,7 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from drf_spectacular.utils import extend_schema
-from apps.common.utils.response import success_response
+from apps.common.utils.response import success_response, error_response
 from apps.common.throttling import VerifyCodeRateThrottle
 from apps.events.services.event_service import EventService
 from apps.events.selectors.event_selector import EventSelector
@@ -24,13 +24,17 @@ class StudentArenaViewSet(viewsets.ViewSet):
         serializer = VerifyEventRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        event = EventService.verify_event_code(serializer.validated_data["code"])
+        is_valid, message, event = EventService.validate_code(serializer.validated_data["code"])
+
+        if not is_valid or not event:
+            return error_response(message=message or "Invalid Event Code.", status_code=status.HTTP_400_BAD_REQUEST)
+
         event_data = EventSerializer(event).data
         event_data["remaining_slots"] = 100
 
         return success_response(
             data=event_data,
-            message="Event code verified successfully.",
+            message=message or "Event code verified successfully.",
         )
 
     @extend_schema(request=RegisterStudentRequestSerializer)

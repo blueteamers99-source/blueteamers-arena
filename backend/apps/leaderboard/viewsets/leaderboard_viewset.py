@@ -1,6 +1,7 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from apps.common.utils.response import success_response
 from apps.participants.auth.participant_auth import ParticipantTokenAuthentication
@@ -45,12 +46,25 @@ class LeaderboardViewSet(viewsets.ViewSet):
         if student_participant and not event_id and not event_code:
             event_id = str(student_participant.event.id)
 
-        data = LeaderboardService.get_event_leaderboard(
-            event_id=event_id,
-            event_code=event_code,
-            search_query=search_query,
-            student_participant=student_participant,
-        )
+        # Require an event identifier — reject unauthenticated global queries
+        if not event_id and not event_code:
+            return Response(
+                {"success": False, "message": "event_id or event_code query parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            data = LeaderboardService.get_event_leaderboard(
+                event_id=event_id,
+                event_code=event_code,
+                search_query=search_query,
+                student_participant=student_participant,
+            )
+        except Exception:
+            return Response(
+                {"success": False, "message": "Event not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         return success_response(data=data, message="Leaderboard retrieved successfully.")
 
     @extend_schema(responses={200: LeaderboardResponseSerializer})
@@ -63,4 +77,7 @@ class LeaderboardViewSet(viewsets.ViewSet):
                 student_participant=student_participant,
             )
             return success_response(data=data, message="Current event leaderboard retrieved successfully.")
-        return self.list(request)
+        return Response(
+            {"success": False, "message": "Participant authentication required."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )

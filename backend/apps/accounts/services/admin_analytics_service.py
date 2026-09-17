@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from django.db.models import Avg, Count, Max, Min
+from django.db.models import Avg, Count, F, Max, Min
 from apps.events.models.event import Event
 from apps.participants.models.participant import Participant
 from apps.participants.models.participant_progress import ParticipantProgress
@@ -22,8 +22,11 @@ class AdminAnalyticsService:
         avg_score_data = Participant.objects.aggregate(avg_score=Avg("score"))
         avg_score = round(avg_score_data["avg_score"] or 0, 1)
 
-        # Completion rate
-        completed_participants = Participant.objects.filter(completed__gte=total_challenges).count()
+        # Completion rate — compare each participant's completed count
+        # against their own event's total_challenges (not the global count)
+        completed_participants = Participant.objects.filter(
+            completed__gte=F("event__total_challenges")
+        ).count()
         completion_rate = round((completed_participants / total_participants * 100), 1) if total_participants > 0 else 0.0
 
         # Top Colleges

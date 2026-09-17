@@ -1,3 +1,4 @@
+import logging
 import uuid
 from rest_framework import viewsets, status
 from rest_framework.response import Response
@@ -6,59 +7,43 @@ from rest_framework.permissions import AllowAny
 from django.conf import settings
 from apps.participants.models.participant import Participant
 from apps.participants.auth.participant_auth import ParticipantTokenAuthentication
+from apps.participants.permissions.is_participant import IsParticipant
+logger = logging.getLogger(__name__)
 
 
 class CertificateViewSet(viewsets.ViewSet):
     authentication_classes = [ParticipantTokenAuthentication]
-    permission_classes = [AllowAny]
+    permission_classes = [IsParticipant]
 
-    def _resolve_authenticated_participant(self, request):
-        participant = getattr(request, "participant", None)
-        if not participant and hasattr(request, "user") and request.user:
-            participant = getattr(request.user, "participant", None)
-        if participant:
-            return participant
-
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
-            try:
-                import jwt
-                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-                p_id = payload.get("participant_id")
-                if p_id:
-                    return Participant.objects.filter(id=p_id).first()
-            except Exception:
-                pass
-
-        return None
+    def _resolve_participant(self, request):
+        """
+        Returns the authenticated participant via DRF auth.
+        No email lookup, no manual JWT decode, no fallback.
+        """
+        return getattr(request, "participant", None)
 
     def list(self, request):
-        participant = self._resolve_authenticated_participant(request)
+        participant = self._resolve_participant(request)
         if not participant:
             return Response(
                 {"success": False, "message": "Authentication required to view certificate status."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-
         event = participant.event
-        passing_score = getattr(event, "passing_score", 300) or 300
+        passing_score = getattr(event, "passing_score", 600) or 600
         total_challenges = getattr(event, "total_challenges", 5) or 5
-
         # Strict server-side verification: Score >= passing_score AND completed >= total_challenges
         is_score_passed = participant.score >= passing_score
         is_challenges_completed = participant.completed >= total_challenges
         is_eligible = is_score_passed and is_challenges_completed
-
+        # Previous template format: compact verification ID (first 8 UUID chars).
         cert_id = f"CERT-BLUETEAM-{str(participant.id)[:8].upper()}"
-
         if not is_eligible:
             reasons = []
             if not is_challenges_completed:
                 reasons.append(f"completed {participant.completed}/{total_challenges} challenges")
             if not is_score_passed:
                 reasons.append(f"scored {participant.score}/{passing_score} passing points")
-
             return Response(
                 {
                     "success": False,
@@ -77,7 +62,6 @@ class CertificateViewSet(viewsets.ViewSet):
                 },
                 status=status.HTTP_200_OK,
             )
-
         return Response(
             {
                 "success": True,
@@ -98,32 +82,43 @@ class CertificateViewSet(viewsets.ViewSet):
             },
             status=status.HTTP_200_OK,
         )
-
     @action(detail=False, methods=["get"], url_path="download/(?P<verification_id>[^/.]+)")
     def download(self, request, verification_id=None):
+        # Requires participant authentication (class-level IsParticipant) and
+        # ownership: a participant may only download their own certificate.
         from django.http import HttpResponse
         from apps.participants.services.certificate_pdf_service import CertificatePDFService
-
+        auth_participant = getattr(request, "participant", None)
+        if not auth_participant:
+            return Response({"success": False, "message": "Participant authentication required."}, status=status.HTTP_401_UNAUTHORIZED)
         if not verification_id:
             return Response({"success": False, "message": "Verification ID required."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Match verification ID prefix (e.g. CERT-BLUETEAM-1A2B3C4D -> 1a2b3c4d)
-        p_prefix = verification_id.replace("CERT-BLUETEAM-", "").replace("CERT-BTA-", "").lower()
-        if len(p_prefix) < 8:
+        # Resolve the ID: accept both the compact display form (first 8 UUID
+        # chars — previous template format) and the full 36-char UUID.
+        p_id = verification_id.replace("CERT-BLUETEAM-", "").replace("CERT-BTA-", "").lower().strip()
+        if len(p_id) < 8:
             return Response({"success": False, "message": "Invalid certificate verification ID format."}, status=status.HTTP_404_NOT_FOUND)
-
-        participant = Participant.objects.filter(id__startswith=p_prefix).first()
-        if not participant:
+        is_full_uuid = len(p_id) == 36 and p_id.count("-") == 4
+        # Ownership: startswith covers both forms (equality for full UUIDs).
+        if not str(auth_participant.id).lower().startswith(p_id):
+            return Response({"success": False, "message": "Forbidden. You may only download your own certificate."}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            if is_full_uuid:
+                participant = Participant.objects.get(id__iexact=p_id)
+            else:
+                participant = Participant.objects.get(id__istartswith=p_id)
+        except (Participant.DoesNotExist, Exception):
             return Response({"success": False, "message": "Certificate record not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        # Enforce that participant actually passed
-        passing_score = getattr(participant.event, "passing_score", 300) or 300
+        # Enforce full eligibility: score AND challenge completion
+        event = participant.event
+        passing_score = getattr(event, "passing_score", 600) or 600
+        total_challenges = getattr(event, "total_challenges", 5) or 5
         if participant.score < passing_score:
             return Response({"success": False, "message": "Certificate was not issued for this participant."}, status=status.HTTP_404_NOT_FOUND)
-
+        if participant.completed < total_challenges:
+            return Response({"success": False, "message": "Certificate was not issued — not all challenges completed."}, status=status.HTTP_404_NOT_FOUND)
         # Dynamic Rank calculation
         rank = Participant.objects.filter(event=participant.event, score__gt=participant.score).count() + 1
-
         pdf_bytes = CertificatePDFService.generate_pdf_bytes(
             name=participant.name,
             college=participant.event.college_name,
@@ -133,15 +128,22 @@ class CertificateViewSet(viewsets.ViewSet):
             certificate_id=verification_id,
             issued_date=participant.created_at.strftime("%B %Y"),
         )
-
         filename = f"{participant.name.replace(' ', '_')}_{participant.event.college_name.replace(' ', '_')}_{participant.event.workshop_name.replace(' ', '_')}.pdf"
-
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
-
     @action(detail=False, methods=["get"], url_path="verify/(?P<verification_id>[^/.]+)")
     def verify(self, request, verification_id=None):
+        # Requires participant authentication (class-level IsParticipant) and
+        # ownership: a participant may only verify their own certificate.
+        auth_participant = getattr(request, "participant", None)
+        if not auth_participant:
+            return Response({
+                "success": False,
+                "verified": False,
+                "status": "UNAUTHORIZED",
+                "message": "Participant authentication required to verify a certificate.",
+            }, status=status.HTTP_401_UNAUTHORIZED)
         if not verification_id:
             return Response({
                 "success": False,
@@ -149,26 +151,42 @@ class CertificateViewSet(viewsets.ViewSet):
                 "status": "INVALID",
                 "message": "Verification ID is required.",
             }, status=status.HTTP_400_BAD_REQUEST)
-
-        p_prefix = verification_id.replace("CERT-BLUETEAM-", "").replace("CERT-BTA-", "").lower()
-        if len(p_prefix) < 8:
+        # Resolve the ID: accept both the compact display form (first 8 UUID
+        # chars — previous template format) and the full 36-char UUID.
+        p_id = verification_id.replace("CERT-BLUETEAM-", "").replace("CERT-BTA-", "").lower().strip()
+        if len(p_id) < 8:
             return Response({
                 "success": False,
                 "verified": False,
                 "status": "INVALID",
                 "message": "This certificate was not issued by Blueteamers Arena.",
             }, status=status.HTTP_404_NOT_FOUND)
-
-        participant = Participant.objects.filter(id__startswith=p_prefix).first()
-        if not participant:
+        is_full_uuid = len(p_id) == 36 and p_id.count("-") == 4
+        try:
+            if is_full_uuid:
+                participant = Participant.objects.get(id__iexact=p_id)
+            else:
+                participant = Participant.objects.get(id__istartswith=p_id)
+        except (Participant.DoesNotExist, Exception):
             return Response({
                 "success": False,
                 "verified": False,
                 "status": "INVALID",
                 "message": "This certificate was not issued by Blueteamers Arena.",
             }, status=status.HTTP_404_NOT_FOUND)
-
-        passing_score = getattr(participant.event, "passing_score", 300) or 300
+        # Ownership: participants may only verify their own certificate.
+        # startswith covers both forms (equality for full UUIDs).
+        if not str(auth_participant.id).lower().startswith(p_id):
+            return Response({
+                "success": False,
+                "verified": False,
+                "status": "FORBIDDEN",
+                "message": "Forbidden. You may only verify your own certificate.",
+            }, status=status.HTTP_403_FORBIDDEN)
+        # Enforce full eligibility: score AND challenge completion
+        event = participant.event
+        passing_score = getattr(event, "passing_score", 600) or 600
+        total_challenges = getattr(event, "total_challenges", 5) or 5
         if participant.score < passing_score:
             return Response({
                 "success": False,
@@ -176,9 +194,14 @@ class CertificateViewSet(viewsets.ViewSet):
                 "status": "INVALID",
                 "message": "Participant did not meet certificate eligibility criteria.",
             }, status=status.HTTP_404_NOT_FOUND)
-
+        if participant.completed < total_challenges:
+            return Response({
+                "success": False,
+                "verified": False,
+                "status": "INVALID",
+                "message": "Participant did not complete all required challenges.",
+            }, status=status.HTTP_404_NOT_FOUND)
         rank = Participant.objects.filter(event=participant.event, score__gt=participant.score).count() + 1
-
         return Response({
             "success": True,
             "verified": True,

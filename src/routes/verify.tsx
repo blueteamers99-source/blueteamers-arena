@@ -2,6 +2,9 @@ import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ShieldCheck, AlertCircle, Award, CheckCircle2, Trophy, Building2, Calendar, FileText } from "lucide-react";
 import { API_BASE_URL } from "@/lib/config";
+import { studentAuthFetch } from "@/lib/auth";
+import { isRecord } from "@/lib/api-types";
+import type { CertificateVerifyResponse } from "@/lib/api-types";
 
 export const Route = createFileRoute("/verify")({
   component: VerifyPage,
@@ -12,9 +15,11 @@ export const Route = createFileRoute("/verify")({
 
 function VerifyPage() {
   const search = useSearch({ from: "/verify" });
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<CertificateVerifyResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [needsAuth, setNeedsAuth] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const verificationId = search.id || "CERT-BLUETEAM-SYSTEM";
 
@@ -24,18 +29,51 @@ function VerifyPage() {
       return;
     }
 
-    fetch(`${API_BASE_URL}/certificate/verify/${verificationId}/`)
-      .then((res) => res.json())
-      .then((resData) => {
-        if (resData.verified) {
-          setData(resData);
+    studentAuthFetch(`${API_BASE_URL}/certificate/verify/${verificationId}/`)
+      .then(async (res) => {
+        const resData: unknown = await res.json().catch(() => ({}));
+        const message = isRecord(resData) && typeof resData.message === "string" ? resData.message : undefined;
+        if (res.status === 401 || res.status === 403) {
+          setNeedsAuth(true);
+          setError(message || "Please log in or re-enter your event code to view this certificate.");
+        } else if (isRecord(resData) && resData.verified) {
+          setData(resData as CertificateVerifyResponse);
         } else {
-          setError(resData.message || "This certificate was not issued by Blueteamers Arena.");
+          setError(message || "This certificate was not issued by Blueteamers Arena.");
         }
       })
       .catch((err) => setError("Failed to verify credential. Please try again."))
       .finally(() => setLoading(false));
   }, [verificationId]);
+
+  const handleDownload = async () => {
+    if (!data?.verification_id || downloading) return;
+    setDownloading(true);
+    try {
+      const res = await studentAuthFetch(`${API_BASE_URL}/certificate/download/${data.verification_id}/`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.message || "Certificate download failed. Please re-enter your event code and try again.");
+        return;
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const filename = match?.[1] || `certificate_${data.verification_id}.pdf`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Certificate download failed. Please try again.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-6">
@@ -67,7 +105,7 @@ function VerifyPage() {
             <h2 className="text-base font-bold text-destructive">Invalid Certificate</h2>
             <p className="text-xs text-muted-foreground">{error}</p>
           </div>
-        ) : (
+        ) : data ? (
           <div className="space-y-6">
             <div className="text-center space-y-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Credential Holder</span>
@@ -105,17 +143,17 @@ function VerifyPage() {
             </div>
 
             <div className="text-center pt-2">
-              <a
-                href={`${API_BASE_URL}/certificate/download/${data.verification_id}/`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground shadow-md hover:bg-primary/90 transition-all"
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={downloading}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground shadow-md hover:bg-primary/90 transition-all disabled:opacity-60"
               >
-                🎓 Download Official High-Res Vector PDF Certificate
-              </a>
+                {downloading ? "Preparing certificate..." : "🎓 Download Official High-Res Vector PDF Certificate"}
+              </button>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </main>
   );

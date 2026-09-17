@@ -42,12 +42,15 @@ class GoogleAuthService:
         if iss not in ["accounts.google.com", "https://accounts.google.com"]:
             raise AuthenticationFailed("Invalid token issuer.")
 
-        # 2. Validate Audience if configured
+        # 2. Validate Audience (fail-closed: reject if not configured)
         google_client_id = getattr(settings, "GOOGLE_CLIENT_ID", "") or getattr(settings, "GOOGLE_OAUTH_CLIENT_ID", "")
-        if google_client_id:
-            aud = payload.get("aud")
-            if aud != google_client_id:
-                raise AuthenticationFailed("Google token audience mismatch.")
+        if not google_client_id:
+            raise AuthenticationFailed(
+                "Google OAuth is not configured. Set GOOGLE_CLIENT_ID in environment."
+            )
+        aud = payload.get("aud")
+        if aud != google_client_id:
+            raise AuthenticationFailed("Google token audience mismatch.")
 
         # 3. Validate Email and Email Verification Status
         email = payload.get("email")
@@ -92,6 +95,11 @@ class GoogleAuthService:
 
         if not user.is_active:
             raise AuthenticationFailed("Your account has been suspended.")
+
+        # Role enforcement (H-10): never issue student-context tokens to
+        # admin / super-admin accounts. They must use the admin portal login.
+        if user.role != User.RoleChoices.STUDENT:
+            raise AuthenticationFailed("This account must use the admin portal to sign in.")
 
         # Generate standard SimpleJWT tokens
         refresh = RefreshToken.for_user(user)

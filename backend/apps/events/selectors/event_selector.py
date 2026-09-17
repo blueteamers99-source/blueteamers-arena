@@ -1,7 +1,7 @@
 import re
 from typing import Optional
 from django.db import models
-from django.db.models import QuerySet
+from django.db.models import Count, QuerySet
 from apps.events.models.event import Event
 
 
@@ -48,7 +48,10 @@ class EventSelector:
 
     @staticmethod
     def filter_events(status: Optional[str] = None, query: Optional[str] = None) -> QuerySet[Event]:
-        qs = Event.objects.all()
+        qs = Event.objects.annotate(
+            _participants_count=Count("participants", distinct=True),
+            _csv_uploaded_count=Count("approved_students", distinct=True),
+        )
         if status and status != "All":
             qs = qs.filter(status=status)
         if query:

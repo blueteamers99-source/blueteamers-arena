@@ -1,17 +1,20 @@
 from .base import *
+from django.core.exceptions import ImproperlyConfigured
 
 DEBUG = env.bool("DEBUG", default=False)
 
-# Secret Key from Environment Variable
+# Secret Key from Environment Variable — MUST be set in production
 SECRET_KEY = env.str("DJANGO_SECRET_KEY", default=env.str("SECRET_KEY", default=SECRET_KEY))
+if not SECRET_KEY or SECRET_KEY.startswith("django-insecure"):
+    raise ImproperlyConfigured(
+        "SECRET_KEY must be set to a secure random value in production. "
+        "Generate one with: python -c \"from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())\""
+    )
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[
     "blueteamers-arena.onrender.com",
     "*.onrender.com",
     "*.vercel.app",
-    "localhost",
-    "127.0.0.1",
-    "*",
 ])
 
 # CSRF Trusted Origins

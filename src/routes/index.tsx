@@ -6,7 +6,7 @@ import {
   Trophy,
   Linkedin,
   Instagram,
-  Youtube,
+  Send,
 } from "lucide-react";
 import arenaPreviewImage from "@/assets/arena-preview.png";
 
@@ -204,14 +204,14 @@ function Footer() {
         <div className="text-sm text-muted-foreground">© 2026 All rights reserved.</div>
         <div className="flex items-center gap-4 text-muted-foreground">
           <span className="text-sm">Follow us</span>
-          <a href="#" aria-label="LinkedIn" className="hover:text-foreground">
+          <a href="https://www.linkedin.com/company/blueteamers/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="hover:text-foreground">
             <Linkedin className="h-4 w-4" />
           </a>
-          <a href="#" aria-label="Instagram" className="hover:text-foreground">
+          <a href="https://www.instagram.com/blueteamers_/" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="hover:text-foreground">
             <Instagram className="h-4 w-4" />
           </a>
-          <a href="#" aria-label="YouTube" className="hover:text-foreground">
-            <Youtube className="h-4 w-4" />
+          <a href="https://t.me/BlueTeamers" target="_blank" rel="noopener noreferrer" aria-label="Telegram" className="hover:text-foreground">
+            <Send className="h-4 w-4" />
           </a>
         </div>
       </div>

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from apps.common.utils.validators import validate_name
 
 
 class VerifyEventRequestSerializer(serializers.Serializer):
@@ -19,7 +20,7 @@ class VerifyEventResponseSerializer(serializers.Serializer):
 
 class RegisterStudentRequestSerializer(serializers.Serializer):
     event_id = serializers.UUIDField(required=True)
-    name = serializers.CharField(required=True, max_length=150)
+    name = serializers.CharField(required=True, max_length=150, validators=[validate_name])
     email = serializers.EmailField(required=True)
 
 

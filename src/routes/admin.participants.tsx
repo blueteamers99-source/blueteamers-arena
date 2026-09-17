@@ -15,6 +15,9 @@ import {
 } from "lucide-react";
 import { AdminLayout } from "../components/admin/AdminLayout";
 import { API_BASE_URL } from "@/lib/config";
+import { authFetch } from "@/lib/auth";
+import { extractResults } from "@/lib/api-types";
+import type { AdminParticipantItem } from "@/lib/api-types";
 
 export const Route = createFileRoute("/admin/participants")({
   component: AdminParticipants,
@@ -38,14 +41,6 @@ type ParticipantItem = {
   finished_at?: string;
 };
 
-function getAdminToken(): string {
-  if (typeof window === "undefined" || typeof localStorage === "undefined") return "";
-  return (
-    localStorage.getItem("admin_access_token") ||
-    localStorage.getItem("access_token") ||
-    ""
-  );
-}
 
 function AdminParticipants() {
   const [participants, setParticipants] = useState<ParticipantItem[]>([]);
@@ -59,22 +54,13 @@ function AdminParticipants() {
   const [newCollege, setNewCollege] = useState("CBIT");
 
   const loadParticipants = () => {
-    const token = getAdminToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
-    fetch(`${API_BASE_URL}/admin/participants/`, { headers })
-      .then((res) => {
-        if (res.status === 401 && token) {
-          return fetch(`${API_BASE_URL}/admin/participants/`).then((r) => r.json());
-        }
-        return res.json();
-      })
-      .then((resData) => {
-        const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
-        if (Array.isArray(list)) {
+    authFetch(`${API_BASE_URL}/admin/participants/`)
+      .then((res) => res.json())
+      .then((resData: unknown) => {
+        const list = extractResults<AdminParticipantItem>(resData);
+        if (list.length > 0) {
           setParticipants(
-            list.map((item: any) => ({
+            list.map((item) => ({
               id: strVal(item.id),
               name: item.name || "Student",
               email: item.email || "",
@@ -93,7 +79,7 @@ function AdminParticipants() {
     loadParticipants();
   }, []);
 
-  const strVal = (val: any) => (val ? String(val) : String(Math.random()));
+  const strVal = (val: string | number | null | undefined) => (val ? String(val) : String(Math.random()));
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -106,7 +92,7 @@ function AdminParticipants() {
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this participant?")) {
-      fetch(`${API_BASE_URL}/admin/participants/${id}/`, { method: "DELETE" })
+      authFetch(`${API_BASE_URL}/admin/participants/${id}/`, { method: "DELETE" })
         .then(() => loadParticipants())
         .catch(() => {});
       setParticipants((prev) => prev.filter((p) => p.id !== id));
@@ -117,9 +103,8 @@ function AdminParticipants() {
     e.preventDefault();
     if (!newName || !newEmail) return;
 
-    fetch(`${API_BASE_URL}/admin/participants/`, {
+    authFetch(`${API_BASE_URL}/admin/participants/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: newName,
         email: newEmail,
@@ -141,9 +126,8 @@ function AdminParticipants() {
     e.preventDefault();
     if (!editingParticipant) return;
 
-    fetch(`${API_BASE_URL}/admin/participants/${editingParticipant.id}/`, {
+    authFetch(`${API_BASE_URL}/admin/participants/${editingParticipant.id}/`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(editingParticipant),
     }).catch(() => {});
 
@@ -152,9 +136,8 @@ function AdminParticipants() {
   };
 
   const handleExportCSV = () => {
-    fetch(`${API_BASE_URL}/admin/reports/export/`, {
+    authFetch(`${API_BASE_URL}/admin/reports/export/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ format: "csv" }),
     })
       .then((res) => res.blob())

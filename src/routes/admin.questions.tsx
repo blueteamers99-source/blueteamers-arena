@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import { AdminLayout } from "../components/admin/AdminLayout";
 import { API_BASE_URL } from "@/lib/config";
+import { authFetch } from "@/lib/auth";
+import { isRecord, extractResults } from "@/lib/api-types";
+import type { AdminQuestionItem, QuestionImportItem } from "@/lib/api-types";
 
 export const Route = createFileRoute("/admin/questions")({
   component: QuestionBank,
@@ -54,14 +57,6 @@ const CATEGORIES: ("All" | Category)[] = [
 
 const CATEGORY_FILTERS = CATEGORIES;
 
-function getAdminToken(): string {
-  if (typeof window === "undefined" || typeof localStorage === "undefined") return "";
-  return (
-    localStorage.getItem("admin_access_token") ||
-    localStorage.getItem("access_token") ||
-    ""
-  );
-}
 
 function QuestionBank() {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -82,34 +77,33 @@ function QuestionBank() {
   const [creatingChallenge, setCreatingChallenge] = useState(false);
   const [challengeMsg, setChallengeMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Feedback banner for question actions (delete/update) — BUG-006 fix
+  const [actionMsg, setActionMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  useEffect(() => {
+    if (!actionMsg) return;
+    const t = setTimeout(() => setActionMsg(null), 5000);
+    return () => clearTimeout(t);
+  }, [actionMsg]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importSummary, setImportSummary] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
 
   const loadQuestions = () => {
-    const token = getAdminToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
-    fetch(`${API_BASE_URL}/admin/questions/`, { headers })
-      .then((res) => {
-        if (res.status === 401 && token) {
-          return fetch(`${API_BASE_URL}/admin/questions/`).then((r) => r.json());
-        }
-        return res.json();
-      })
-      .then((resData) => {
-        const list = resData.data?.results || resData.results || resData.data || (Array.isArray(resData) ? resData : []);
-        if (Array.isArray(list)) {
+    authFetch(`${API_BASE_URL}/admin/questions/`)
+      .then((res) => res.json())
+      .then((resData: unknown) => {
+        const list = extractResults<AdminQuestionItem>(resData);
+        if (list.length > 0) {
           setQuestions(
-            list.map((q: any) => ({
+            list.map((q) => ({
               id: String(q.id),
               question: q.question_text || q.prompt || q.question || "Question prompt",
               category: (q.category as Category) || "Phishing",
               difficulty: (q.difficulty as Difficulty) || "Easy",
               marks: q.default_points || q.marks || 10,
               status: (q.status as Status) || "Published",
-              options: q.options_json || q.options || ["Option A", "Option B"],
+              options: (q.options_json || q.options || []) as string[],
               correct: q.correct_option_index ?? q.correct ?? 0,
               explanation: q.explanation || "",
             }))
@@ -134,18 +128,27 @@ function QuestionBank() {
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this question?")) {
-      fetch(`${API_BASE_URL}/admin/questions/${id}/`, { method: "DELETE" })
-        .then(() => loadQuestions())
-        .catch(() => loadQuestions());
+      authFetch(`${API_BASE_URL}/admin/questions/${id}/`, { method: "DELETE" })
+        .then((res) => {
+          // authFetch does not throw on HTTP errors (only handles 401 refresh),
+          // so we must check res.ok explicitly — otherwise 403/500 silently "succeed".
+          if (!res.ok) throw new Error(`Delete failed (HTTP ${res.status})`);
+          setActionMsg({ type: "success", text: "Question deleted successfully." });
+          loadQuestions();
+        })
+        .catch((err) => {
+          console.error("Error deleting question:", err);
+          setActionMsg({ type: "error", text: "Failed to delete question. Please try again." });
+          loadQuestions();
+        });
     }
   };
 
   const handleDuplicate = (id: string) => {
     const src = questions.find((q) => q.id === id);
     if (!src) return;
-    fetch(`${API_BASE_URL}/admin/questions/`, {
+    authFetch(`${API_BASE_URL}/admin/questions/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question_text: `${src.question} (Copy)`,
         category: src.category,
@@ -164,9 +167,8 @@ function QuestionBank() {
   };
 
   const handleAdd = (q: Question) => {
-    fetch(`${API_BASE_URL}/admin/questions/`, {
+    authFetch(`${API_BASE_URL}/admin/questions/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question_text: q.question,
         category: q.category,
@@ -185,9 +187,8 @@ function QuestionBank() {
   };
 
   const handleUpdate = (updated: Question) => {
-    fetch(`${API_BASE_URL}/admin/questions/${updated.id}/`, {
+    authFetch(`${API_BASE_URL}/admin/questions/${updated.id}/`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question_text: updated.question,
         category: updated.category,
@@ -200,9 +201,16 @@ function QuestionBank() {
         explanation: updated.explanation,
       }),
     })
-      .then((res) => res.json())
-      .then(() => loadQuestions())
-      .catch(() => loadQuestions());
+      .then((res) => {
+        if (!res.ok) throw new Error(`Update failed (HTTP ${res.status})`);
+        setActionMsg({ type: "success", text: "Question updated successfully." });
+        loadQuestions();
+      })
+      .catch((err) => {
+        console.error("Error updating question:", err);
+        setActionMsg({ type: "error", text: "Failed to update question. Please try again." });
+        loadQuestions();
+      });
     setEditingQuestion(null);
   };
 
@@ -212,16 +220,36 @@ function QuestionBank() {
     }
   };
 
+  const VALID_CATEGORIES: Category[] = ["Phishing", "SIEM", "AI", "Incident Response", "Digital Forensics"];
+  const VALID_DIFFICULTIES: Difficulty[] = ["Easy", "Medium", "Hard"];
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Client-side validation: file type
+    const allowedExtensions = [".csv", ".json", ".txt", ".xlsx"];
+    const ext = "." + file.name.split(".").pop()?.toLowerCase();
+    if (!allowedExtensions.includes(ext)) {
+      setImportSummary({ imported: 0, skipped: 0, errors: ["Invalid file type. Please upload a .csv, .json, .txt, or .xlsx file."] });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    // Client-side validation: file size
+    if (file.size > MAX_FILE_SIZE) {
+      setImportSummary({ imported: 0, skipped: 0, errors: ["File too large. Maximum size is 5MB."] });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
 
     setIsImporting(true);
     const formData = new FormData();
     formData.append("file", file);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/questions/import/`, {
+      const res = await authFetch(`${API_BASE_URL}/admin/questions/import/`, {
         method: "POST",
         body: formData,
       });
@@ -236,43 +264,95 @@ function QuestionBank() {
         });
       } else {
         const text = await file.text();
-        let parsed: Question[] = [];
+        const errors: string[] = [];
+        let parsed: (Question | null)[] = [];
 
         if (file.name.endsWith(".json")) {
-          const raw = JSON.parse(text);
+          let raw: unknown;
+          try {
+            raw = JSON.parse(text);
+          } catch {
+            setImportSummary({ imported: 0, skipped: 0, errors: ["Invalid JSON file. Please check the file format."] });
+            setIsImporting(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            return;
+          }
           const arr = Array.isArray(raw) ? raw : [raw];
-          parsed = arr.map((item, idx) => ({
-            id: String(Date.now() + idx),
-            question: item.question_text || item.question || `Imported Question ${idx + 1}`,
-            category: item.category || "Phishing",
-            difficulty: item.difficulty || "Easy",
-            marks: item.default_points || item.marks || 10,
-            status: item.status || "Published",
-            options: item.options || ["Option 1", "Option 2"],
-            correct: item.correct || 0,
-          }));
-        } else {
-          const lines = text.split("\n").filter((l) => l.trim().length > 0);
-          parsed = lines.slice(1).map((line, idx) => {
-            const cols = line.split(",");
+          parsed = arr.map((item: QuestionImportItem, idx) => {
+            const questionText = item.question_text || item.question;
+            if (!questionText || !String(questionText).trim()) {
+              errors.push(`Row ${idx + 1}: Missing question text — skipped.`);
+              return null;
+            }
+            const category = item.category || "Phishing";
+            if (!VALID_CATEGORIES.includes(category as Category)) {
+              errors.push(`Row ${idx + 1}: Invalid category "${category}" — defaulted to Phishing.`);
+            }
+            const difficulty = item.difficulty || "Easy";
+            if (!VALID_DIFFICULTIES.includes(difficulty as Difficulty)) {
+              errors.push(`Row ${idx + 1}: Invalid difficulty "${difficulty}" — defaulted to Easy.`);
+            }
+            const marks = Number(item.default_points || item.marks || 10);
+            if (isNaN(marks) || marks < 0) {
+              errors.push(`Row ${idx + 1}: Invalid marks "${item.default_points || item.marks}" — defaulted to 10.`);
+            }
             return {
               id: String(Date.now() + idx),
-              question: cols[0]?.replace(/"/g, "") || `Imported Question ${idx + 1}`,
-              category: (cols[1]?.replace(/"/g, "") as Category) || "Phishing",
-              difficulty: (cols[2]?.replace(/"/g, "") as Difficulty) || "Easy",
-              marks: Number(cols[3]) || 10,
+              question: String(questionText).trim(),
+              category: VALID_CATEGORIES.includes(category as Category) ? (category as Category) : "Phishing",
+              difficulty: VALID_DIFFICULTIES.includes(difficulty as Difficulty) ? (difficulty as Difficulty) : "Easy",
+              marks: isNaN(marks) || marks < 0 ? 10 : marks,
+              status: "Published",
+              options: Array.isArray(item.options) && item.options.length > 0 ? item.options : ["Option 1", "Option 2"],
+              correct: typeof item.correct === "number" ? item.correct : 0,
+            };
+          });
+        } else {
+          const lines = text.split("\n").filter((l) => l.trim().length > 0);
+          if (lines.length < 2) {
+            setImportSummary({ imported: 0, skipped: 0, errors: ["File is empty or has no data rows."] });
+            setIsImporting(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            return;
+          }
+          parsed = lines.slice(1).map((line, idx) => {
+            const cols = line.split(",");
+            const questionText = cols[0]?.replace(/"/g, "").trim();
+            if (!questionText) {
+              errors.push(`Row ${idx + 2}: Missing question text — skipped.`);
+              return null;
+            }
+            const category = cols[1]?.replace(/"/g, "").trim() || "Phishing";
+            if (cols[1]?.trim() && !VALID_CATEGORIES.includes(category as Category)) {
+              errors.push(`Row ${idx + 2}: Invalid category "${category}" — defaulted to Phishing.`);
+            }
+            const difficulty = cols[2]?.replace(/"/g, "").trim() || "Easy";
+            if (cols[2]?.trim() && !VALID_DIFFICULTIES.includes(difficulty as Difficulty)) {
+              errors.push(`Row ${idx + 2}: Invalid difficulty "${difficulty}" — defaulted to Easy.`);
+            }
+            const marks = Number(cols[3]);
+            if (cols[3]?.trim() && (isNaN(marks) || marks < 0)) {
+              errors.push(`Row ${idx + 2}: Invalid marks "${cols[3]?.trim()}" — defaulted to 10.`);
+            }
+            return {
+              id: String(Date.now() + idx),
+              question: questionText,
+              category: VALID_CATEGORIES.includes(category as Category) ? (category as Category) : "Phishing",
+              difficulty: VALID_DIFFICULTIES.includes(difficulty as Difficulty) ? (difficulty as Difficulty) : "Easy",
               status: "Published",
               options: ["Option 1", "Option 2"],
               correct: 0,
+              marks: isNaN(marks) || marks < 0 ? 10 : marks,
             };
           });
         }
 
-        setQuestions((prev) => [...parsed, ...prev]);
+        const validItems = parsed.filter((item): item is Question => item !== null);
+        setQuestions((prev) => [...validItems, ...prev]);
         setImportSummary({
-          imported: parsed.length,
-          skipped: 0,
-          errors: [],
+          imported: validItems.length,
+          skipped: parsed.length - validItems.length,
+          errors,
         });
       }
     } catch (err) {
@@ -294,16 +374,11 @@ function QuestionBank() {
     setCreatingChallenge(true);
     setChallengeMsg(null);
 
-    const token = getAdminToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
     const slug = challengeTitle.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
     try {
-      const res = await fetch(`${API_BASE_URL}/challenges/`, {
+      const res = await authFetch(`${API_BASE_URL}/challenges/`, {
         method: "POST",
-        headers,
         body: JSON.stringify({
           title: challengeTitle.trim(),
           name: challengeTitle.trim(),
@@ -317,7 +392,7 @@ function QuestionBank() {
       });
 
       const contentType = res.headers.get("content-type") || "";
-      let data: any = {};
+      let data: unknown = {};
       if (contentType.includes("application/json")) {
         data = await res.json();
       } else {
@@ -325,7 +400,7 @@ function QuestionBank() {
         console.warn("Non-JSON response received:", text);
       }
 
-      if (res.ok || data.success || data.id) {
+      if (res.ok && isRecord(data) && data.success) {
         setChallengeMsg({ type: "success", text: `Challenge '${challengeTitle}' created successfully in PostgreSQL!` });
         setTimeout(() => {
           setShowCreateChallenge(false);
@@ -334,11 +409,18 @@ function QuestionBank() {
           setChallengeMsg(null);
         }, 1500);
       } else {
-        const detailErr = data.message || (data.errors ? Object.entries(data.errors).map(([k, v]) => `${k}: ${v}`).join(", ") : "Failed to create challenge in backend.");
+        const errors = isRecord(data) && isRecord(data.errors)
+          ? Object.entries(data.errors).map(([k, v]) => `${k}: ${v}`).join(", ")
+          : "";
+        const detailErr =
+          (isRecord(data) && typeof data.message === "string" ? data.message : "") ||
+          errors ||
+          "Failed to create challenge in backend.";
         setChallengeMsg({ type: "error", text: detailErr });
       }
-    } catch (err: any) {
-      setChallengeMsg({ type: "error", text: `Failed: ${err.message || err}` });
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setChallengeMsg({ type: "error", text: `Failed: ${detail}` });
     } finally {
       setCreatingChallenge(false);
     }
@@ -361,6 +443,17 @@ function QuestionBank() {
             Author, categorize, and publish questions across blue team domains.
           </p>
         </div>
+        {actionMsg && (
+          <div
+            className={`w-full rounded-lg border px-4 py-2.5 text-sm font-medium ${
+              actionMsg.type === "success"
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                : "border-destructive/30 bg-destructive/10 text-destructive"
+            }`}
+          >
+            {actionMsg.text}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setShowCreateChallenge(true)}

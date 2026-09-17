@@ -76,7 +76,10 @@ class User(AbstractUser):
 
     @property
     def is_admin_role(self) -> bool:
-        return self.role in [self.RoleChoices.ADMIN, self.RoleChoices.SUPER_ADMIN] or self.is_staff
+        # Role field is the single source of truth for admin access.
+        # is_staff alone (e.g. a mis-provisioned createsuperuser with default
+        # STUDENT role) must NOT grant admin API access.
+        return self.role in [self.RoleChoices.ADMIN, self.RoleChoices.SUPER_ADMIN]
 
     @property
     def is_super_admin_role(self) -> bool:

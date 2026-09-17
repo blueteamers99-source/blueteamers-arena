@@ -172,7 +172,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    @action(detail=True, methods=["get", "delete"], url_path="approved-students", permission_classes=[AllowAny])
+    @action(detail=True, methods=["get", "delete"], url_path="approved-students", permission_classes=[IsAdmin])
     def approved_students(self, request, pk=None):
         from apps.events.models.approved_student import ApprovedStudent
         from apps.participants.models.participant import Participant

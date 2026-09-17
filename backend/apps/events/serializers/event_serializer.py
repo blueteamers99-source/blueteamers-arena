@@ -45,11 +45,15 @@ class EventSerializer(serializers.ModelSerializer):
         ]
 
     def get_participants_count(self, obj) -> int:
+        if hasattr(obj, "_participants_count"):
+            return obj._participants_count
         if hasattr(obj, "participants"):
             return obj.participants.count()
         return 0
 
     def get_csv_uploaded_count(self, obj) -> int:
+        if hasattr(obj, "_csv_uploaded_count"):
+            return obj._csv_uploaded_count
         if hasattr(obj, "approved_students"):
             return obj.approved_students.count()
         return 0

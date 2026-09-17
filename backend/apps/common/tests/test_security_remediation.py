@@ -220,13 +220,15 @@ class SecurityRemediationTestCase(TestCase):
     # -------------------------------------------------------------
     def test_cross_event_challenge_access_denied(self):
         """TEST 10: Participant A cannot submit answers to Challenge B (Event B)."""
+        self.challenge_b1.event = self.event_b
+        self.challenge_b1.save()
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
         response = self.client.post(
             f"/api/v1/challenges/{self.challenge_b1.slug}/submit/",
             {"answers": {}},
             format="json",
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     # -------------------------------------------------------------
     # F-03: Certificate Security & Server Eligibility
@@ -248,9 +250,9 @@ class SecurityRemediationTestCase(TestCase):
         self.assertEqual(response.data.get("status"), "LOCKED")
 
     def test_fake_certificate_verification_id_invalid(self):
-        """TEST 13: Fake certificate verification ID returns 404."""
+        """TEST 13: Unauthenticated certificate verify request returns 401 (participant auth required)."""
         response = self.client.get("/api/v1/certificate/verify/CERT-BLUETEAM-FAKE9999/")
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     # -------------------------------------------------------------
     # F-10: Approved Students CSV Authorization
@@ -296,3 +298,109 @@ class SecurityRemediationTestCase(TestCase):
             format="json",
         )
         self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
+
+    # -------------------------------------------------------------
+    # Finding #1: Cross-Event Evidence IDOR Remediation
+    # -------------------------------------------------------------
+    def test_cross_event_evidence_access_denied(self):
+        """Participant A (Event A) cannot read evidence from a challenge in Event B."""
+        from apps.challenges.models.evidence import Evidence
+
+        self.challenge_b1.event = self.event_b
+        self.challenge_b1.save()
+        Evidence.objects.create(
+            challenge=self.challenge_b1,
+            artifact_key="auth-log",
+            label="Auth Log Dump",
+            filename="auth.log",
+            content_text="SENSITIVE-EVENT-B-LOG-CONTENT",
+        )
+
+        # Participant A (Event A) — must be denied
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
+        response = self.client.get(f"/api/v1/challenges/{self.challenge_b1.slug}/evidence/auth-log/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Participant B (Event B, owner) — must succeed
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_b}")
+        response = self.client.get(f"/api/v1/challenges/{self.challenge_b1.slug}/evidence/auth-log/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data.get("data", {}).get("content_text"), "SENSITIVE-EVENT-B-LOG-CONTENT")
+
+    def test_same_event_evidence_access_allowed(self):
+        """Participant A can read evidence for a challenge in their own event."""
+        from apps.challenges.models.evidence import Evidence
+
+        self.challenge_a1.event = self.event_a
+        self.challenge_a1.save()
+        Evidence.objects.create(
+            challenge=self.challenge_a1,
+            artifact_key="phishing-email",
+            label="Phishing Email",
+            filename="email.txt",
+            content_text="Suspicious email body",
+        )
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
+        response = self.client.get(f"/api/v1/challenges/{self.challenge_a1.slug}/evidence/phishing-email/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_anonymous_evidence_access_denied(self):
+        """Anonymous requests to evidence are rejected."""
+        response = self.client.get(f"/api/v1/challenges/{self.challenge_a1.slug}/evidence/any-key/")
+        self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
+
+    # -------------------------------------------------------------
+    # Finding #2: Certificate Verify/Download Require Participant Auth
+    # -------------------------------------------------------------
+    def test_certificate_verify_requires_authentication(self):
+        """Unauthenticated verify requests return 401 — no public PII disclosure."""
+        cert_id = f"CERT-BLUETEAM-{self.participant_a.id}"
+        response = self.client.get(f"/api/v1/certificate/verify/{cert_id}/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_certificate_verify_ownership_enforced(self):
+        """Participant A cannot verify Participant B's certificate."""
+        cert_id = f"CERT-BLUETEAM-{self.participant_b.id}"
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
+        response = self.client.get(f"/api/v1/certificate/verify/{cert_id}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_certificate_download_requires_authentication(self):
+        """Unauthenticated PDF download returns 401."""
+        cert_id = f"CERT-BLUETEAM-{self.participant_a.id}"
+        response = self.client.get(f"/api/v1/certificate/download/{cert_id}/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_certificate_download_ownership_enforced(self):
+        """Participant A cannot download Participant B's certificate PDF."""
+        cert_id = f"CERT-BLUETEAM-{self.participant_b.id}"
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
+        response = self.client.get(f"/api/v1/certificate/download/{cert_id}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    # -------------------------------------------------------------
+    # Finding #3: Seed Endpoint Must Not Accept GET
+    # -------------------------------------------------------------
+    def test_seed_data_get_method_not_allowed(self):
+        """GET on seed-data returns 405 — destructive seeding is POST-only."""
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get("/api/v1/admin/seed-data/")
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    # -------------------------------------------------------------
+    # Finding #4: is_staff Alone Must Not Grant Admin Access
+    # -------------------------------------------------------------
+    def test_staff_only_user_denied_admin_api(self):
+        """A user with is_staff=True but role=STUDENT is NOT an admin."""
+        staff_only = User.objects.create_user(
+            username="staff_only_sec",
+            email="staff_only_sec@blueteamers.io",
+            password="StaffPassword123!",
+            role=User.RoleChoices.STUDENT,
+            is_staff=True,
+        )
+        self.assertFalse(staff_only.is_admin_role)
+        self.client.force_authenticate(user=staff_only)
+        response = self.client.get("/api/v1/admin/dashboard/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

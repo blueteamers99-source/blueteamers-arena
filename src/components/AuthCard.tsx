@@ -12,6 +12,7 @@ import {
   ArrowRight,
   AlertCircle,
   Loader2,
+  CheckCircle,
 } from "lucide-react";
 import { setStudentAuth } from "@/lib/auth";
 import { API_BASE_URL } from "@/lib/config";
@@ -33,6 +34,7 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
   const [rememberMe, setRememberMe] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [showAdminHint, setShowAdminHint] = useState(false);
 
   // Signup Form States
   const [fullName, setFullName] = useState("");
@@ -52,7 +54,53 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
     setMode(targetMode);
   };
 
-  // Password strength calculator
+  // Common passwords list (subset of Django's CommonPasswordValidator top entries)
+  const COMMON_PASSWORDS = useMemo(
+    () => new Set([
+      "password", "password1", "password12", "password123", "password1234",
+      "12345678", "123456789", "1234567890",
+      "qwerty", "qwerty123", "qwertyuiop",
+      "abc123", "abcdef", "abcdefg",
+      "letmein", "welcome", "admin", "master",
+      "monkey", "dragon", "login", "princess",
+      "football", "shadow", "sunshine", "trustno1",
+      "iloveyou", "batman", "access", "hello",
+      "charlie", "donald", "passw0rd", "michael",
+      "111111", "123123", "1234", "12345", "123456", "1234567",
+    ]),
+    [],
+  );
+
+  // Password validation rules (mirrors Django's AUTH_PASSWORD_VALIDATORS)
+  const passwordErrors = useMemo(() => {
+    const errors: string[] = [];
+    const pw = signupPassword;
+    if (!pw) return errors;
+
+    if (pw.length < 8) {
+      errors.push("At least 8 characters");
+    }
+
+    if (/^\d+$/.test(pw)) {
+      errors.push("Cannot be entirely numeric");
+    }
+
+    if (COMMON_PASSWORDS.has(pw.toLowerCase())) {
+      errors.push("This password is too common");
+    }
+
+    // Similarity check: password should not be too close to email/username/name
+    const userAttrs = [signupEmail.split("@")[0].toLowerCase(), username.toLowerCase(), fullName.toLowerCase()];
+    for (const attr of userAttrs) {
+      if (attr.length >= 3 && pw.toLowerCase().includes(attr)) {
+        errors.push("Password is too similar to your personal info");
+        break;
+      }
+    }
+
+    return errors;
+  }, [signupPassword, signupEmail, username, fullName, COMMON_PASSWORDS]);
+
   const passwordStrength = useMemo(() => {
     if (!signupPassword) return 0;
     let score = 0;
@@ -67,6 +115,7 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
+    setShowAdminHint(false);
     setLoginLoading(true);
 
     try {
@@ -80,6 +129,15 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
       if (res.ok && data.success) {
         setStudentAuth(data.data.tokens, data.data.user);
         navigate({ to: "/dashboard" });
+      } else if (
+        res.status === 401 &&
+        typeof data.message === "string" &&
+        data.message.toLowerCase().includes("admin portal")
+      ) {
+        // Backend role enforcement (H-10): valid credentials, but this
+        // account is an admin/super-admin. Offer the admin portal.
+        setShowAdminHint(true);
+        setLoginError(data.message);
       } else {
         setLoginError(data.message || "Invalid credentials.");
       }
@@ -97,6 +155,11 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
 
     if (signupPassword !== confirmPassword) {
       setSignupError("Passwords do not match.");
+      return;
+    }
+
+    if (passwordErrors.length > 0) {
+      setSignupError(passwordErrors[0]);
       return;
     }
 
@@ -159,6 +222,18 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
           <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-medium text-red-400">
             <AlertCircle className="h-4 w-4 shrink-0" />
             {loginError}
+          </div>
+        )}
+
+        {showAdminHint && (
+          <div className="mb-4 flex items-center justify-between gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 text-xs font-medium text-amber-400">
+            <span>Administrator account detected.</span>
+            <Link
+              to="/admin/login"
+              className="shrink-0 rounded-md bg-amber-500/20 px-2.5 py-1 font-semibold text-amber-300 hover:bg-amber-500/30 transition-colors"
+            >
+              Go to Admin Portal →
+            </Link>
           </div>
         )}
 
@@ -370,7 +445,7 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
                 </button>
               </div>
               {signupPassword && (
-                <div className="mt-1 space-y-0.5">
+                <div className="mt-1.5 space-y-1">
                   <div className="h-1 w-full rounded-full bg-border overflow-hidden">
                     <div
                       className={`h-full transition-all ${
@@ -383,6 +458,25 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
                           : "bg-emerald-500 w-full"
                       }`}
                     />
+                  </div>
+                  <div className="space-y-0.5">
+                    {[
+                      { label: "At least 8 characters", pass: signupPassword.length >= 8 },
+                      { label: "Not entirely numeric", pass: !/^\d+$/.test(signupPassword) },
+                      { label: "Not a common password", pass: !COMMON_PASSWORDS.has(signupPassword.toLowerCase()) },
+                      { label: "Not similar to your info", pass: !passwordErrors.includes("Password is too similar to your personal info") },
+                    ].map((rule) => (
+                      <div key={rule.label} className="flex items-center gap-1.5">
+                        {rule.pass ? (
+                          <CheckCircle className="h-3 w-3 shrink-0 text-emerald-500" />
+                        ) : (
+                          <AlertCircle className="h-3 w-3 shrink-0 text-red-400" />
+                        )}
+                        <span className={`text-[10px] font-medium ${rule.pass ? "text-emerald-500" : "text-red-400"}`}>
+                          {rule.label}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

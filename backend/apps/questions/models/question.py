@@ -33,7 +33,7 @@ class Question(BaseModel):
     evidence_text = models.TextField(blank=True, null=True)
     options_json = models.JSONField(default=list, blank=True)  # List of strings for MCQ
     correct_answer = models.TextField(blank=True, default="")  # Correct string for text, or option index/value
-    correct_option_index = models.IntegerField(default=0, blank=True, null=True)
+    correct_option_index = models.IntegerField(default=None, blank=True, null=True)
     explanation = models.TextField(blank=True, null=True)
     default_points = models.PositiveIntegerField(default=10)
     status = models.CharField(
