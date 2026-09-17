@@ -44,7 +44,7 @@ class DashboardViewSet(viewsets.ViewSet):
                 "completed": dashboard_data["completed_challenges"],
                 "total": dashboard_data["current_event"]["total_challenges"],
                 "progress": dashboard_data["completion_percentage"],
-                "time_left": dashboard_data["time_remaining"].get("seconds_remaining", 3600),
+                "time_left": dashboard_data["time_remaining"].get("remaining_seconds", 3600),
                 "event": dashboard_data["current_event"]["workshop_name"],
                 "college": dashboard_data["current_event"]["college_name"],
                 "data": dashboard_data,

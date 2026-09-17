@@ -26,16 +26,19 @@ class ChallengeService:
         return challenge
 
     @staticmethod
-    def add_evidence(challenge: Challenge, artifact_key: str, label: str, filename: str, file_format: str, content_text: str = "", image_url: str = "") -> Evidence:
+    def add_evidence(challenge: Challenge, artifact_key: str, label: str, filename: str, file_format: str, content_text: str = "", image_url: str = "", position: int | None = None) -> Evidence:
+        defaults = {
+            "label": label,
+            "filename": filename,
+            "file_format": file_format,
+            "content_text": content_text,
+            "image_url": image_url,
+        }
+        if position is not None:
+            defaults["position"] = position
         evidence, _ = Evidence.objects.update_or_create(
             challenge=challenge,
             artifact_key=artifact_key,
-            defaults={
-                "label": label,
-                "filename": filename,
-                "file_format": file_format,
-                "content_text": content_text,
-                "image_url": image_url,
-            },
+            defaults=defaults,
         )
         return evidence

@@ -16,6 +16,7 @@ import {
   getSelectedEvent,
   type MockEvent,
 } from "@/lib/mock-events";
+import { useEventCountdown } from "@/lib/useEventCountdown";
 import {
   CHALLENGES,
   DIFFICULTY_BADGE,
@@ -45,6 +46,8 @@ function ChallengesPage() {
   const [ev, setEv] = useState<MockEvent | null>(null);
   const [progress, setProgress] = useState<ProgressMap>({});
   const [selected, setSelected] = useState<Challenge | null>(null);
+  // Same live event timer as the dashboard so both screens agree.
+  const { formatted: eventTimeLeft } = useEventCountdown();
 
   useEffect(() => {
     const eventCode = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("arena.selectedEventCode") : null;
@@ -98,8 +101,8 @@ function ChallengesPage() {
           <StatCard
             icon={<Clock className={`h-4 w-4 ${accent.text}`} />}
             label="Time Remaining"
-            value="02:05:18"
-            sub="Hours"
+            value={eventTimeLeft}
+            sub="Minutes"
           />
         </div>
 
