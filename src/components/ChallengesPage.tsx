@@ -17,6 +17,7 @@ import {
   getSelectedEvent,
   type MockEvent,
 } from "@/lib/mock-events";
+import { useEventCountdown } from "@/lib/useEventCountdown";
 import {
   CHALLENGES,
   DIFFICULTY_BADGE,
@@ -40,6 +41,8 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
   const [selected, setSelected] = useState<Challenge | null>(null);
   const [search, setSearch] = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("All");
+  // Same live event timer as the dashboard so both screens agree.
+  const { formatted: eventTimeLeft } = useEventCountdown();
 
   useEffect(() => {
     setEv(getSelectedEvent());
@@ -127,8 +130,8 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
           <StatCard
             icon={<Clock className={`h-4 w-4 ${accent.text}`} />}
             label="Time Remaining"
-            value="02:05:18"
-            sub="Hours"
+            value={eventTimeLeft}
+            sub="Minutes"
           />
         </div>
 

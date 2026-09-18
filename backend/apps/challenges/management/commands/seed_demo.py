@@ -9,6 +9,53 @@ from apps.questions.models.question import Question
 from apps.challenges.models.challenge import Challenge
 from apps.challenges.models.evidence import Evidence
 from apps.challenges.models.challenge_question import ChallengeQuestion
+from apps.challenges.management.commands.seed_existing_challenges import (
+    EXISTING_FIVE_CHALLENGES as CANONICAL_CHALLENGES,
+    EVIDENCE_TEXT_DATA,
+)
+
+
+def _canonical_evidence(cd: dict) -> list:
+    """
+    Return the evidence rows to seed for a challenge.
+
+    For the five canonical challenges we reuse the shared definitions in
+    seed_existing_challenges so both seeders always produce identical artifact
+    keys, content and (critically) ordering/position — otherwise running both
+    commands could assign conflicting positions to the same artifacts.
+    """
+    canonical = next(
+        (c for c in CANONICAL_CHALLENGES if c["slug"] == cd["slug"]), None
+    )
+    if canonical:
+        rows = []
+        for pos, ev_item in enumerate(canonical["evidence"]):
+            txt = EVIDENCE_TEXT_DATA.get(ev_item["id"])
+            rows.append({
+                "key": ev_item["id"],
+                "label": ev_item["label"],
+                "filename": ev_item["filename"],
+                "format": txt["format"] if txt else ev_item.get("format", "PNG"),
+                "content": txt["content"] if txt else None,
+                "image_url": ev_item["image"],
+                "size": ev_item.get("size", "4 KB"),
+                "position": pos,
+            })
+        return rows
+    # Fallback for demo-only challenges not among the canonical five.
+    return [
+        {
+            "key": ev["key"],
+            "label": ev["label"],
+            "filename": ev["filename"],
+            "format": ev["format"],
+            "content": ev.get("content"),
+            "image_url": ev.get("image_url"),
+            "size": "4 KB",
+            "position": pos,
+        }
+        for pos, ev in enumerate(cd["evidence"])
+    ]
 
 
 class Command(BaseCommand):
@@ -81,6 +128,13 @@ class Command(BaseCommand):
                 ],
                 "evidence": [
                     {
+                        "key": "email",
+                        "label": "Email Screenshot",
+                        "filename": "email-screenshot.png",
+                        "format": Evidence.FormatChoices.PNG,
+                        "image_url": "/__EVIDENCE_EMAIL__",
+                    },
+                    {
                         "key": "headers",
                         "label": "Email Headers",
                         "filename": "email-headers.txt",
@@ -98,13 +152,6 @@ class Command(BaseCommand):
                             "To: employee@corp.local\n"
                             "Subject: [ACTION REQUIRED] Verify Your Payroll Information\n"
                         ),
-                    },
-                    {
-                        "key": "email",
-                        "label": "Email Screenshot",
-                        "filename": "email-screenshot.png",
-                        "format": Evidence.FormatChoices.PNG,
-                        "image_url": "/__EVIDENCE_EMAIL__",
                     },
                 ],
                 "questions": [
@@ -130,9 +177,9 @@ class Command(BaseCommand):
                 ],
                 "evidence": [
                     {
-                        "key": "wazuh-alerts",
-                        "label": "Wazuh Alerts",
-                        "filename": "wazuh-alerts.json",
+                        "key": "wazuh",
+                        "label": "Wazuh Dashboard",
+                        "filename": "wazuh-dashboard.png",
                         "format": Evidence.FormatChoices.JSON,
                         "content": '{\n  "alerts": [\n    {"id": 101, "level": 12, "rule": "SSH Brute Force", "src_ip": "198.51.100.44", "user": "root"},\n    {"id": 102, "level": 15, "rule": "Web Shell Upload", "src_ip": "198.51.100.44", "target": "/var/www/html/shell.php"}\n  ]\n}',
                     },
@@ -258,8 +305,9 @@ class Command(BaseCommand):
                 },
             )
 
-            # Add Evidence
-            for ev_data in cd["evidence"]:
+            # Add Evidence (position = canonical resource order; the first
+            # evidence entry opens by default in the student workspace)
+            for ev_data in _canonical_evidence(cd):
                 Evidence.objects.update_or_create(
                     challenge=ch,
                     artifact_key=ev_data["key"],
@@ -267,14 +315,21 @@ class Command(BaseCommand):
                         "label": ev_data["label"],
                         "filename": ev_data["filename"],
                         "file_format": ev_data["format"],
-                        "content_text": ev_data.get("content"),
-                        "image_url": ev_data.get("image_url"),
+                        "content_text": ev_data["content"],
+                        "image_url": ev_data["image_url"],
+                        "file_size_display": ev_data["size"],
+                        "position": ev_data["position"],
                     },
                 )
 
             # Add Questions & Links
+            # Idempotency: remove any pre-existing links first. Reusing get_or_create
+            # without cleanup previously ACCUMULATED question links across seeders
+            # (e.g. PhishNet graded against 50+50 canonical + 30+40 demo = 170,
+            # while other users saw 100), corrupting max_possible_score per user.
+            ChallengeQuestion.objects.filter(challenge=ch).delete()
             for pos, q_data in enumerate(cd["questions"], start=1):
-                q, _ = Question.objects.get_or_create(
+                q, _ = Question.objects.update_or_create(
                     question_text=q_data["text"],
                     defaults={
                         "category": q_data["cat"],
