@@ -20,14 +20,17 @@ import {
   ExternalLink,
   ChevronRight,
   AlertCircle,
+  Crown,
+  TimerReset,
 } from "lucide-react";
 
 import { Navbar } from "@/components/Navbar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { API_BASE_URL } from "@/lib/config";
 import { studentAuthFetch } from "@/lib/auth";
-import { extractRankings } from "@/lib/api-types";
-import type { LeaderboardEntry } from "@/lib/api-types";
+import { extractLeaderboardPayload } from "@/lib/api-types";
+import type { LeaderboardEntry, LeaderboardPayload } from "@/lib/api-types";
+import { formatClock } from "@/lib/useEventCountdown";
 
 export const Route = createFileRoute("/leaderboard")({
   component: ArenaCommandCenter,
@@ -48,9 +51,22 @@ function ArenaCommandCenter() {
   const [collegeFilter, setCollegeFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [leaderboardItems, setLeaderboardItems] = useState<LeaderboardEntry[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardPayload | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<LeaderboardEntry | null>(null);
+  // Local relative countdown: the server supplies the authoritative remaining
+  // seconds on every poll; we tick it down locally between polls.
+  const [serverRemaining, setServerRemaining] = useState<number | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<number>(Date.now());
+  const [nowTick, setNowTick] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const displayRemaining =
+    serverRemaining === null ? null : Math.max(0, serverRemaining - Math.floor((nowTick - lastSyncAt) / 1000));
 
   const fetchLeaderboardData = () => {
     setIsRefreshing(true);
@@ -59,17 +75,20 @@ function ArenaCommandCenter() {
         ? sessionStorage.getItem("arena.selectedEventCode")
         : null;
 
-    // The backend requires an event identifier (H-03 fix): pass the event the
-    // user is in, or fall back to the authenticated participant's own event.
-    // If the stored event code is stale/mismatched the backend 404s — we retry
-    // with /leaderboard/current/ below so standings always reflect the
-    // participant's own event (kept in sync with the dashboard).
     let url =
       eventCode && eventCode !== "global"
         ? `${API_BASE_URL}/leaderboard/?event_code=${encodeURIComponent(eventCode)}`
         : `${API_BASE_URL}/leaderboard/current/`;
 
-    const parseList = (resData: unknown): LeaderboardEntry[] => extractRankings<LeaderboardEntry>(resData);
+    const applyPayload = (resData: unknown) => {
+      const payload = extractLeaderboardPayload(resData);
+      setLeaderboard(payload);
+      setLeaderboardItems(payload.rankings);
+      if (typeof payload.time_remaining === "number") {
+        setServerRemaining(payload.time_remaining);
+        setLastSyncAt(Date.now());
+      }
+    };
 
     studentAuthFetch(url)
       .then((res) => {
@@ -77,9 +96,9 @@ function ArenaCommandCenter() {
         return res.json();
       })
       .then((resData) => {
-        const list = parseList(resData);
-        if (list.length > 0) {
-          setLeaderboardItems(list);
+        const payload = extractLeaderboardPayload(resData);
+        if (payload.rankings.length > 0) {
+          applyPayload(resData);
         } else if (url !== `${API_BASE_URL}/leaderboard/current/`) {
           // Event-scoped query returned nothing usable — retry with the
           // authenticated participant's own event.
@@ -87,7 +106,7 @@ function ArenaCommandCenter() {
           return studentAuthFetch(url)
             .then((retryRes) => (retryRes.ok ? retryRes.json() : null))
             .then((retryData) => {
-              if (retryData) setLeaderboardItems(parseList(retryData));
+              if (retryData) applyPayload(retryData);
             });
         }
       })
@@ -111,11 +130,30 @@ function ArenaCommandCenter() {
 
   // Calculate PostgreSQL Command Center Top Statistics (from real data only)
   const totalParticipants = leaderboardItems.length;
-  const activeParticipants = leaderboardItems.filter((i) => i.is_active || false).length;
-  const completedParticipants = leaderboardItems.filter((i) => i.completed >= 5).length;
+  const activeParticipants = leaderboardItems.filter((i) => !i.is_finished).length;
+  const completedParticipants = leaderboardItems.filter((i) => i.is_finished).length;
+  const totalChallenges = leaderboardItems.reduce((m, i) => Math.max(m, i.completed || 0), 0) || 5;
   const avgScore = totalParticipants > 0 ? Math.round(leaderboardItems.reduce((acc, i) => acc + i.score, 0) / totalParticipants) : 0;
   const certificatesGenerated = leaderboardItems.filter((i) => i.score >= 600).length;
-  const liveChallengesRunning = 0; // TODO: derive from backend event data when available
+  const liveChallengesRunning = leaderboardItems.filter((i) => !i.is_finished && i.score > 0).length;
+  const isFinal = Boolean(leaderboard?.is_final);
+  const winner = leaderboard?.winner ?? (isFinal && leaderboardItems[0] ? leaderboardItems[0] : null);
+  const finalReason = leaderboard?.final_reason ?? null;
+  const eventStatus = leaderboard?.event_status ?? "Live";
+  // While the quiz runs this is the current top-3 of the live board; once the
+  // event is final it switches to the officially announced top-3 winners —
+  // always sourced from the same ranked list, so both views stay in sync.
+  const podium = isFinal
+    ? leaderboard?.winners?.length
+      ? leaderboard.winners
+      : leaderboardItems.slice(0, 3)
+    : leaderboard?.top3_podium?.length
+      ? leaderboard.top3_podium
+      : leaderboardItems.slice(0, 3);
+  // Best score so far — the live "pace setter" to make the run feel alive.
+  const topScore = leaderboardItems.length > 0 ? leaderboardItems[0].score : 0;
+  const secondsToHHMMSS = (secs: number | null) =>
+    secs === null ? "--:-- : --" : formatClock(secs);
 
   // Filtered Leaderboard Items
   const filteredItems = useMemo(() => {
@@ -123,7 +161,7 @@ function ArenaCommandCenter() {
     return leaderboardItems.filter((item) => {
       const nameMatch = !q || item.name.toLowerCase().includes(q) || item.email.toLowerCase().includes(q) || item.college_name.toLowerCase().includes(q);
       const collegeMatch = collegeFilter === "All" || item.college_name === collegeFilter;
-      const statusMatch = statusFilter === "All" || (statusFilter === "Completed" ? item.completed >= 5 : item.completed < 5);
+      const statusMatch = statusFilter === "All" || (statusFilter === "Completed" ? item.is_finished : !item.is_finished);
       return nameMatch && collegeMatch && statusMatch;
     });
   }, [leaderboardItems, search, collegeFilter, statusFilter]);
@@ -138,7 +176,7 @@ function ArenaCommandCenter() {
       escapeCSV(item.college_name),
       `${item.completed}/5`,
       item.score,
-      item.completed >= 5 ? "Completed" : "Running",
+      item.is_finished ? "Completed" : "Running",
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
@@ -163,20 +201,44 @@ function ArenaCommandCenter() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-6">
           <div>
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-400">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" /> REAL-TIME COMMAND CENTER
+              <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${isFinal ? "border-amber-500/50 bg-amber-500/10 text-amber-400" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"}`}>
+                <span className={`h-2 w-2 rounded-full ${isFinal ? "bg-amber-400" : "bg-emerald-400"} ${isFinal ? "" : "animate-ping"}`} />
+                {isFinal ? "🏁 FINAL RESULTS" : "⚡ REAL-TIME COMMAND CENTER"}
               </span>
-              <span className="text-xs text-muted-foreground font-mono">POSTGRESQL LIVE AGGREGATION</span>
+              <span className="text-xs text-muted-foreground font-mono">
+                {isFinal ? "STANDINGS LOCKED" : eventStatus === "Live" ? "LIVE — UPDATES EVERY 4s" : "POSTGRESQL LIVE AGGREGATION"}
+              </span>
             </div>
             <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-3">
               SOC Arena Command Center
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Live control room monitoring student activity, incident submissions, rankings, and certificates.
+              {isFinal
+                ? "The competition has concluded. Final standings are locked and the winner is crowned."
+                : "Live control room monitoring student activity, incident submissions, rankings, and certificates."}
             </p>
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Live countdown + top score pulse */}
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 shadow-md">
+              <TimerReset className={`h-4 w-4 ${displayRemaining !== null && displayRemaining <= 0 && !isFinal ? "text-destructive" : "text-primary"}`} />
+              <div className="leading-tight">
+                <div className="text-[9px] uppercase tracking-wider text-muted-foreground">{isFinal ? "Event Ended" : "Time Remaining"}</div>
+                <div className={`font-mono font-bold text-sm ${displayRemaining !== null && displayRemaining <= 0 && !isFinal ? "text-destructive" : "text-foreground"}`}>
+                  {secondsToHHMMSS(displayRemaining)}
+                </div>
+              </div>
+            </div>
+
+            <div className="hidden md:flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-2.5 shadow-md">
+              <Flame className="h-4 w-4 text-amber-400" />
+              <div className="leading-tight">
+                <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Top Score</div>
+                <div className="font-mono font-bold text-sm text-amber-400">{topScore} PTS</div>
+              </div>
+            </div>
+
             <button
               onClick={fetchLeaderboardData}
               disabled={isRefreshing}
@@ -195,6 +257,71 @@ function ArenaCommandCenter() {
           </div>
         </div>
 
+        {/* Winner Jumbotron — crowned the moment results are final */}
+        {isFinal && winner && (
+          <div className="relative overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-500/10 via-card to-emerald-500/10 p-6 shadow-2xl">
+            <div className="pointer-events-none absolute -right-8 -top-10 text-[180px] font-black text-amber-500/10 select-none leading-none">🏆</div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between relative z-10">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/50 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-400">
+                  <Crown className="h-4 w-4" />
+                  {finalReason === "all_finished" ? "ALL PARTICIPANTS FINISHED" : "EVENT TIME EXPIRED"} — WINNER CROWNED
+                </div>
+                <h2 className="mt-3 text-4xl font-black tracking-tight text-foreground">
+                  {winner.name}
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {winner.college_name} • {winner.completed} challenges completed • Finished in {winner.time_taken || "--:--"}
+                </p>
+              </div>
+              <div className="flex items-center gap-6">
+                <div className="text-center">
+                  <div className="text-4xl font-black text-amber-400 font-mono">{winner.score}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Final Score</div>
+                </div>
+                {isPassedEntry(winner) && (
+                  <Link
+                    to="/verify"
+                    search={{ id: `CERT-BLUETEAM-${strId(winner.participant_id)}` }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-xs font-bold text-black shadow-lg hover:bg-amber-400 transition-all"
+                  >
+                    <Award className="h-4 w-4" /> Winner Certificate
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Podium — top 3 on the live board while running, final order when locked */}
+        {podium.length > 0 && (
+          <ErrorBoundary label="Leaderboard Podium">
+            <div className="grid gap-4 sm:grid-cols-3">
+              {podium.map((p, idx) => (
+                <div
+                  key={p.participant_id}
+                  className={`rounded-2xl border p-4 shadow-xl relative overflow-hidden ${
+                    idx === 0 ? "border-amber-500/60 bg-gradient-to-b from-amber-500/15 to-card"
+                    : idx === 1 ? "border-slate-400/40 bg-gradient-to-b from-slate-400/10 to-card"
+                    : "border-amber-700/40 bg-gradient-to-b from-amber-700/10 to-card"
+                  }`}
+                >
+                  <div className="text-3xl">{idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"}</div>
+                  <div className="mt-2 truncate font-bold text-foreground">{p.name}</div>
+                  <div className="truncate text-[11px] text-muted-foreground">{p.college_name}</div>
+                  <div className="mt-1 flex items-center justify-between text-xs">
+                    <span className="font-mono font-bold text-amber-400">{p.score} PTS</span>
+                    <span className="text-muted-foreground">{p.completed} completed</span>
+                  </div>
+                  {!isFinal && !p.is_finished && (
+                    <span className="absolute right-3 top-3 rounded-full bg-emerald-500 px-2 py-0.5 text-[9px] font-bold text-black">LIVE</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </ErrorBoundary>
+        )}
+
         {/* Error Banner */}
         {fetchError && (
           <div className="flex items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm font-semibold text-destructive">
@@ -211,7 +338,7 @@ function ArenaCommandCenter() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard icon={<Users className="h-4 w-4 text-blue-400" />} label="Total Participants" value={totalParticipants} sub="Enrolled in Event" />
           <StatCard icon={<Activity className="h-4 w-4 text-emerald-400" />} label="Currently Active" value={activeParticipants} sub="Online Now" />
-          <StatCard icon={<CheckCircle2 className="h-4 w-4 text-cyan-400" />} label="Completed Event" value={completedParticipants} sub="All 5 Challenges" />
+          <StatCard icon={<CheckCircle2 className="h-4 w-4 text-cyan-400" />} label="Completed Event" value={completedParticipants} sub={`All ${totalChallenges} Challenges`} />
           <StatCard icon={<Flame className="h-4 w-4 text-amber-400" />} label="Average Score" value={`${avgScore} Pts`} sub="Avg Score" />
           <StatCard icon={<Award className="h-4 w-4 text-purple-400" />} label="Certificates Issued" value={certificatesGenerated} sub="Verified Credentials" />
           <StatCard icon={<Trophy className="h-4 w-4 text-rose-400" />} label="Live Challenges" value={liveChallengesRunning} sub="Running Sessions" />
@@ -340,13 +467,17 @@ function ArenaCommandCenter() {
                           {item.score} PTS
                         </td>
                         <td className="px-4 py-3.5">
-                          {completedCount >= 5 ? (
+                          {item.is_finished ? (
                             <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
                               🏁 Completed
                             </span>
+                          ) : item.score > 0 ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-cyan-500/20 px-2 py-0.5 text-[10px] font-bold text-cyan-400">
+                              <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" /> In Progress
+                            </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-400">
-                              🟡 Running
+                              🟡 Not Started
                             </span>
                           )}
                         </td>
@@ -521,6 +652,10 @@ function StatCard({ icon, label, value, sub }: { icon: React.ReactNode; label: s
       <div className="text-[10px] text-muted-foreground">{sub}</div>
     </div>
   );
+}
+
+function isPassedEntry(item: LeaderboardEntry): boolean {
+  return item.score >= 600;
 }
 
 function strId(id: string | number | null | undefined): string {

@@ -55,21 +55,39 @@ class ParticipantService:
                 "message": "Event registration has expired."
             })
 
-        # Rule 1: Approved Student PostgreSQL Check
-        approved_students_count = ApprovedStudent.objects.filter(event=event).count()
-        if approved_students_count > 0:
-            is_approved = ApprovedStudent.objects.filter(
+        # Rule 1: Approved Student Check — HARD GATE.
+        # Only students hardcoded into the backend (via CSV upload of the
+        # Google Form responses, or Django admin) may register for the event.
+        # There is NO open-registration fallback: if the student is not on the
+        # approved list, registration is rejected even with a valid event code.
+        # Match is case-insensitive on BOTH email and name, because students
+        # often type their name differently in the arena than in the form.
+        is_approved = ApprovedStudent.objects.filter(
+            event=event,
+            registered_email__iexact=email,
+            registered_name__iexact=name,
+        ).exists()
+
+        if not is_approved:
+            # Give a precise hint when the email is on the list but the name
+            # does not match (most common real-world mixup).
+            email_on_list = ApprovedStudent.objects.filter(
                 event=event,
                 registered_email__iexact=email,
             ).exists()
-
-            if not is_approved:
+            if email_on_list:
                 raise ValidationError(
                     {
-                        "detail": "You are not authorized for this event. Please use the same Name and Email that were submitted during registration.",
-                        "message": "You are not authorized for this event. Please use the same Name and Email that were submitted during registration.",
+                        "detail": "This email is registered for the event, but the name does not match your Google Form registration. Please enter your name exactly as submitted in the form, or contact the college admins for help.",
+                        "message": "This email is registered for the event, but the name does not match your Google Form registration. Please enter your name exactly as submitted in the form, or contact the college admins for help.",
                     }
                 )
+            raise ValidationError(
+                {
+                    "detail": "You are not a registered user for this event. Only students who have registered can participate",
+                    "message": "You are not a registered user for this event. Only students who have registered can participate",
+                }
+            )
 
         # Rule 2: Duplicate Joined Protection
         # Use get_or_create for atomicity — prevents race condition when
@@ -83,7 +101,9 @@ class ParticipantService:
                     email=email,
                     defaults={
                         'name': name,
-                        'started_at': timezone.now(),
+                        # Event-wide timer intentionally NOT started here.
+                        # The clock starts only when the student clicks
+                        # 'Start Challenge' (ProgressService.start_challenge).
                     },
                 )
                 return participant

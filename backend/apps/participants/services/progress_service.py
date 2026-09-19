@@ -10,6 +10,22 @@ from apps.submissions.services.submission_service import SubmissionService
 
 
 class ProgressService:
+    # Event-wide window (2:30:00). One clock for the whole event shared by all
+    # challenges — there is NO per-challenge timer anymore.
+    EVENT_DURATION_MINUTES = 150
+
+    @staticmethod
+    def start_event_clock(participant: Participant):
+        """
+        Idempotently start the event-wide clock on an explicit 'Start
+        Challenge' click. Registration does NOT start the timer.
+        """
+        if participant.started_at is None:
+            Participant.objects.filter(pk=participant.pk, started_at__isnull=True).update(
+                started_at=timezone.now()
+            )
+            participant.refresh_from_db(fields=["started_at"])
+
     @staticmethod
     def _verify_event_access(participant: Participant, challenge: Challenge):
         challenge_event = getattr(challenge, "event", None)
@@ -19,6 +35,10 @@ class ProgressService:
     @staticmethod
     def start_challenge(participant: Participant, challenge: Challenge) -> Dict[str, Any]:
         ProgressService._verify_event_access(participant, challenge)
+
+        # The event-wide clock starts (or resumes — idempotent) only here,
+        # on an explicit 'Start Challenge' click. Registration never starts it.
+        ProgressService.start_event_clock(participant)
 
         duration_min = getattr(challenge, "duration_minutes", 20) or 20
         total_points = getattr(challenge, "points", 100) or 100
@@ -63,10 +83,14 @@ class ProgressService:
             },
         )
 
-        # Calculate server remaining time
-        remaining_time = progress.calculate_remaining_time_seconds()
-        if progress.status == ParticipantProgress.StatusChoices.IN_PROGRESS and remaining_time <= 0 and progress.started_at:
-            # Enforce time limit: mark challenge as expired
+        # Event-wide expiry: the single event clock governs ALL challenges.
+        # A challenge can only be expired when the event window itself is over.
+        event_remaining = participant.get_event_remaining_seconds()
+        if (
+            progress.status == ParticipantProgress.StatusChoices.IN_PROGRESS
+            and participant.started_at
+            and event_remaining <= 0
+        ):
             progress.status = ParticipantProgress.StatusChoices.EXPIRED
             progress.save()
 
@@ -116,8 +140,15 @@ class ProgressService:
             "total_questions": total_questions,
             "score_earned": progress.score_earned,
             "max_possible_score": progress.max_possible_score or total_points,
+            # Universal score — the participant's total across the whole event
+            "total_participant_score": participant.score,
+            "completed_challenges": participant.completed,
+            # Event-wide timer fields — the same clock on every challenge
+            "event_time_limit_seconds": int((getattr(participant.event, "duration_minutes", 150) or 150) * 60),
+            "event_remaining_time_seconds": event_remaining,
+            "event_started_at": participant.started_at.isoformat() if participant.started_at else None,
             "time_limit_seconds": progress.time_limit_seconds or (duration_min * 60),
-            "remaining_time_seconds": remaining_time,
+            "remaining_time_seconds": event_remaining,
             "draft_answers": drafts_data,
             "answers": simplified_answers,
             "started_at": progress.started_at.isoformat() if progress.started_at else None,
@@ -155,7 +186,6 @@ class ProgressService:
 
         if progress.status == ParticipantProgress.StatusChoices.NOT_STARTED:
             progress.status = ParticipantProgress.StatusChoices.IN_PROGRESS
-            progress.started_at = timezone.now()
 
         # Update JSON drafts
         existing_drafts = progress.draft_answers if isinstance(progress.draft_answers, dict) else {}
@@ -301,8 +331,8 @@ class ProgressService:
         """
         progresses = ParticipantProgress.objects.filter(participant=participant).select_related("challenge")
         progress_map = {}
+        event_remaining = participant.get_event_remaining_seconds()
         for p in progresses:
-            rem_sec = p.calculate_remaining_time_seconds()
             answered_count = len([k for k, v in (p.draft_answers or {}).items() if v is not None and str(v).strip() != ""])
             slug = p.challenge.slug or str(p.challenge.id)
             progress_map[slug] = {
@@ -311,7 +341,8 @@ class ProgressService:
                 "max_possible_score": p.max_possible_score,
                 "answered_questions": answered_count,
                 "current_question_index": p.current_question_index,
-                "remaining_time_seconds": rem_sec,
+                # Universal event clock — identical value for every challenge
+                "remaining_time_seconds": event_remaining,
                 "started_at": p.started_at.isoformat() if p.started_at else None,
                 "completed_at": p.completed_at.isoformat() if p.completed_at else None,
             }

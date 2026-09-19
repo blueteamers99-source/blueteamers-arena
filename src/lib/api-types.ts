@@ -13,10 +13,27 @@ export interface LeaderboardEntry {
   completed: number;
   time_taken: string;
   is_current_user: boolean;
+  is_finished?: boolean;
   // Not part of the current serializer contract; preserved only because the
   // leaderboard "Currently Active" stat reads it. Remove once the backend
   // exposes real activity/status data.
   is_active?: boolean;
+}
+
+export interface LeaderboardPayload {
+  event_code: string;
+  college_name: string;
+  event_status?: "Upcoming" | "Live" | "Completed" | string;
+  is_final?: boolean;
+  final_reason?: "all_finished" | "time_up" | null;
+  time_remaining?: number;
+  total_participants?: number;
+  top3_podium?: LeaderboardEntry[];
+  winners?: LeaderboardEntry[];
+  rankings: LeaderboardEntry[];
+  winner?: LeaderboardEntry | null;
+  student_position?: LeaderboardEntry | null;
+  nearby_rankings?: LeaderboardEntry[];
 }
 
 export interface StudentDashboardDetail {
@@ -254,6 +271,7 @@ export interface CertificateResponse {
   unlocked?: boolean;
   certificate_id?: string;
   name?: string;
+  email?: string;
   event?: string;
   college?: string;
   message?: string;
@@ -327,4 +345,30 @@ export function extractRankings<T>(resData: unknown): T[] {
 export function extractObject<T>(resData: unknown): T {
   if (!isRecord(resData)) return resData as T;
   return (resData.challenge ?? resData.data ?? resData) as T;
+}
+
+// Extracts the full leaderboard payload envelope (metadata + rankings):
+// { data: { rankings, winner, is_final, ... } } or { rankings, is_final, ... }.
+export function extractLeaderboardPayload(resData: unknown): LeaderboardPayload {
+  if (!isRecord(resData)) return { event_code: "", college_name: "", rankings: [] };
+  const data = isRecord(resData.data) ? resData.data : resData;
+  const rankings = extractRankings<LeaderboardEntry>(resData);
+  const asRecord = (v: unknown): v is Record<string, unknown> => isRecord(v);
+  return {
+    event_code: typeof data.event_code === "string" ? data.event_code : "",
+    college_name: typeof data.college_name === "string" ? data.college_name : "",
+    event_status: typeof data.event_status === "string" ? (data.event_status as LeaderboardPayload["event_status"]) : undefined,
+    is_final: typeof data.is_final === "boolean" ? data.is_final : false,
+    final_reason: asRecord(data) && (data.final_reason === "all_finished" || data.final_reason === "time_up")
+      ? data.final_reason
+      : null,
+    time_remaining: typeof data.time_remaining === "number" ? data.time_remaining : undefined,
+    total_participants: typeof data.total_participants === "number" ? data.total_participants : rankings.length,
+    top3_podium: Array.isArray(data.top3_podium) ? (data.top3_podium as LeaderboardEntry[]) : [],
+    winners: Array.isArray(data.winners) ? (data.winners as LeaderboardEntry[]) : [],
+    rankings,
+    winner: asRecord(data) && isRecord(data.winner) ? (data.winner as unknown as LeaderboardEntry) : null,
+    student_position: asRecord(data) && isRecord(data.student_position) ? (data.student_position as unknown as LeaderboardEntry) : null,
+    nearby_rankings: Array.isArray(data.nearby_rankings) ? (data.nearby_rankings as LeaderboardEntry[]) : [],
+  };
 }

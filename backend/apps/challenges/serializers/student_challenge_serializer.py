@@ -36,6 +36,8 @@ class StudentChallengeListSerializer(serializers.ModelSerializer):
     unlocked = serializers.SerializerMethodField()
     category = serializers.SerializerMethodField()
 
+    total_participant_score = serializers.SerializerMethodField()
+
     class Meta:
         model = Challenge
         fields = [
@@ -55,6 +57,7 @@ class StudentChallengeListSerializer(serializers.ModelSerializer):
             "status",
             "completed",
             "score_earned",
+            "total_participant_score",
             "answered_questions",
             "remaining_time_seconds",
             "unlocked",
@@ -107,10 +110,26 @@ class StudentChallengeListSerializer(serializers.ModelSerializer):
         return len([k for k, v in prog.draft_answers.items() if v is not None and str(v).strip() != ""])
 
     def get_remaining_time_seconds(self, obj) -> int:
-        prog = self._get_progress(obj)
-        if not prog:
-            return (obj.duration_minutes or 20) * 60
-        return prog.calculate_remaining_time_seconds()
+        # Universal event clock: every challenge reports the SAME remaining
+        # time (the event-wide window started on 'Start Challenge').
+        request = self.context.get("request")
+        participant = getattr(request, "participant", None) if request else None
+        if not participant and request and request.user:
+            participant = getattr(request.user, "participant", None)
+        if not participant:
+            event = getattr(obj, "event", None)
+            duration_min = getattr(event, "duration_minutes", 150) or 150
+            return int(duration_min * 60)
+        return participant.get_event_remaining_seconds()
+
+    def get_total_participant_score(self, obj) -> int:
+        # Universal score: the participant's accumulated score across the
+        # whole event — identical on every challenge.
+        request = self.context.get("request")
+        participant = getattr(request, "participant", None) if request else None
+        if not participant and request and request.user:
+            participant = getattr(request.user, "participant", None)
+        return participant.score if participant else 0
 
     def get_unlocked(self, obj) -> bool:
         return True
@@ -125,6 +144,7 @@ class StudentChallengeDetailSerializer(serializers.ModelSerializer):
     resources = serializers.SerializerMethodField()
     category = serializers.SerializerMethodField()
     progress = serializers.SerializerMethodField()
+    total_participant_score = serializers.SerializerMethodField()
 
     class Meta:
         model = Challenge
@@ -147,6 +167,7 @@ class StudentChallengeDetailSerializer(serializers.ModelSerializer):
             "evidence",
             "questions",
             "progress",
+            "total_participant_score",
         ]
 
     def get_category(self, obj) -> str:
@@ -154,6 +175,14 @@ class StudentChallengeDetailSerializer(serializers.ModelSerializer):
         if first_q and first_q.question:
             return first_q.question.category
         return "SOC Investigation"
+
+    def get_total_participant_score(self, obj) -> int:
+        # Universal score — the participant's total across the whole event
+        request = self.context.get("request")
+        participant = getattr(request, "participant", None) if request else None
+        if not participant and request and request.user:
+            participant = getattr(request.user, "participant", None)
+        return participant.score if participant else 0
 
     def get_resources(self, obj) -> list:
         res = []
@@ -188,7 +217,7 @@ class StudentChallengeDetailSerializer(serializers.ModelSerializer):
 
         if not participant:
             return {"status": "not_started", "current_question_index": 0, "visited_questions": [], "draft_answers": {}}
-        
+
         progress = ParticipantProgress.objects.filter(
             participant=participant,
             challenge=obj,
@@ -196,12 +225,17 @@ class StudentChallengeDetailSerializer(serializers.ModelSerializer):
         if not progress:
             return {"status": "not_started", "current_question_index": 0, "visited_questions": [], "draft_answers": {}}
 
+        # Universal event clock — same remaining time across all challenges
+        event_remaining = participant.get_event_remaining_seconds()
+
         return {
             "status": progress.status,
             "current_question_index": progress.current_question_index,
             "visited_questions": progress.visited_questions or [],
             "score_earned": progress.score_earned,
-            "remaining_time_seconds": progress.calculate_remaining_time_seconds(),
+            "remaining_time_seconds": event_remaining,
+            "event_remaining_time_seconds": event_remaining,
+            "event_started_at": participant.started_at.isoformat() if participant.started_at else None,
             "draft_answers": progress.draft_answers or {},
             "started_at": progress.started_at.isoformat() if progress.started_at else None,
         }

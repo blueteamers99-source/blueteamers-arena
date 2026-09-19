@@ -30,8 +30,19 @@ class DashboardService:
         remaining_count = max(0, total_challenges - completed_count)
         completion_percentage = round((completed_count / total_challenges * 100), 1) if total_challenges > 0 else 0.0
 
-        # Calculate timer stats
-        timer_data = TimerService.calculate_time(participant.started_at, event.duration_minutes)
+        # Calculate timer stats — event-wide clock started on 'Start Challenge'
+        event_duration = getattr(event, "duration_minutes", 150) or 150
+        if not participant.started_at:
+            # Clock not started yet: show full window, not expired
+            timer_data = {
+                "started_at": None,
+                "duration_minutes": event_duration,
+                "remaining_seconds": event_duration * 60,
+                "is_expired": False,
+                "formatted_remaining": f"{event_duration}:00:00",
+            }
+        else:
+            timer_data = TimerService.calculate_time(participant.started_at, event_duration)
 
         # Recent activity timeline
         recent_activity = []

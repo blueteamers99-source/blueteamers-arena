@@ -85,7 +85,7 @@ function Student() {
         }
         navigate({ to: "/dashboard" });
       } else {
-        setError(data.message || data.detail || "You are not authorized for this event. Please use the same Name and Email that were submitted during registration.");
+        setError(data.message || data.detail || "You are not a registered user for this event. Only students who have registered can participate");
       }
     } catch (err) {
       console.error("Student registration error:", err);
