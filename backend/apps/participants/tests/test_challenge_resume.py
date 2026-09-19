@@ -169,13 +169,18 @@ class ChallengeResumeAutoSaveTests(TestCase):
         self.assertNotIn(str(self.q4.id), data["answers"])
 
     # -------------------------------------------------------------
-    # TEST 5 & 6: Server-Authoritative Timer & Immunity to Clock Tampering
+    # TEST 5 & 6: Server-Authoritative EVENT-WIDE Timer & Immunity to Clock
+    # Tampering. One clock for the whole event: starts on 'Start Challenge'
+    # (Participant.started_at) and is shared by every challenge.
     # -------------------------------------------------------------
     def test_server_authoritative_timer_calculation(self):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
 
-        # Start challenge 10 minutes ago
+        # Event-wide clock started 10 minutes ago (via a Start Challenge click)
         past_time = timezone.now() - timedelta(minutes=10)
+        self.participant.started_at = past_time
+        self.participant.save(update_fields=["started_at"])
+
         progress = ParticipantProgress.objects.create(
             participant=self.participant,
             challenge=self.challenge1,
@@ -188,9 +193,34 @@ class ChallengeResumeAutoSaveTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.data["data"]
 
-        # 20 min total - 10 min elapsed = ~600 seconds remaining
+        # Event-wide window (event.duration_minutes, default 150 min)
+        # minus 10 min elapsed. Every challenge reports the SAME value.
+        event_duration_sec = self.event_a.duration_minutes * 60
         remaining = data["remaining_time_seconds"]
-        self.assertAlmostEqual(remaining, 600, delta=5)
+        self.assertAlmostEqual(remaining, event_duration_sec - 600, delta=5)
+        self.assertAlmostEqual(data["event_remaining_time_seconds"], remaining, delta=1)
+
+    # -------------------------------------------------------------
+    # TEST 6b: Timer does NOT start at registration — only on Start Challenge
+    # -------------------------------------------------------------
+    def test_timer_not_started_by_registration(self):
+        # A freshly registered participant has started_at=None...
+        self.assertIsNone(self.participant.started_at)
+
+        # ...and the progress API reports the FULL event window, not a
+        # partially elapsed clock.
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+        response = self.client.get(f"/api/v1/challenges/{self.challenge1.slug}/progress/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data["data"]
+        self.assertIsNone(data["event_started_at"])
+        self.assertEqual(data["event_remaining_time_seconds"], self.event_a.duration_minutes * 60)
+
+        # Clicking 'Start Challenge' starts the universal event clock
+        start_resp = self.client.post(f"/api/v1/challenges/{self.challenge1.slug}/start/")
+        self.assertEqual(start_resp.status_code, status.HTTP_200_OK)
+        self.participant.refresh_from_db()
+        self.assertIsNotNone(self.participant.started_at)
 
     # -------------------------------------------------------------
     # TEST 7: Cross-Participant Access Rejected

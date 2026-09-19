@@ -17,7 +17,8 @@ class Event(BaseModel):
     description = models.TextField(blank=True, default="")
     event_code = models.CharField(max_length=50, unique=True, db_index=True)
     event_date = models.DateField()
-    duration_minutes = models.PositiveIntegerField(default=60)
+    # Event-wide window: a single 2:30:00 clock shared by ALL challenges.
+    duration_minutes = models.PositiveIntegerField(default=150)
     passing_score = models.PositiveIntegerField(default=600)
     total_challenges = models.PositiveIntegerField(default=5)
     accent_color = models.CharField(max_length=20, default="blue")
