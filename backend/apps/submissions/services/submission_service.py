@@ -27,18 +27,22 @@ class SubmissionService:
             if participant.event and participant.event.status == "Completed":
                 raise PermissionDenied("This event has ended. Submissions are no longer accepted.")
 
-            # 2b. Validate Challenge Timer
+            # 2b. Validate Event-Wide Timer — the single event clock governs
+            # all challenges; there is no per-challenge time limit anymore.
+            event_remaining = participant.get_event_remaining_seconds()
+            if participant.started_at and event_remaining <= 0:
+                ParticipantProgress.objects.filter(
+                    participant=participant,
+                    challenge=challenge,
+                    status=ParticipantProgress.StatusChoices.IN_PROGRESS,
+                ).update(status=ParticipantProgress.StatusChoices.EXPIRED)
+                raise ValidationError("Event time has expired. Submission rejected.")
+
             progress_check = ParticipantProgress.objects.filter(
                 participant=participant, challenge=challenge
             ).first()
-            if progress_check and progress_check.status == ParticipantProgress.StatusChoices.IN_PROGRESS:
-                remaining = progress_check.calculate_remaining_time_seconds()
-                if remaining <= 0:
-                    progress_check.status = ParticipantProgress.StatusChoices.EXPIRED
-                    progress_check.save()
-                    raise ValidationError("Challenge time has expired. Submission rejected.")
-            elif progress_check and progress_check.status == ParticipantProgress.StatusChoices.EXPIRED:
-                raise ValidationError("Challenge time has expired. Submission rejected.")
+            if progress_check and progress_check.status == ParticipantProgress.StatusChoices.EXPIRED:
+                raise ValidationError("Event time has expired. Submission rejected.")
 
             # 3. Server-side Auto-Grading (F-05) - Evaluate ground truth Question keys
             grading_result = AutoGradingService.grade_submission(challenge, answers or {})

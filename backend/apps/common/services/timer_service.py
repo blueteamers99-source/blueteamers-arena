@@ -9,6 +9,16 @@ class TimerService:
     strictly from database records to prevent browser refresh resets.
     """
     @staticmethod
+    def _format_clock(total_seconds: int) -> str:
+        """Format as H:MM:SS when the window is an hour or more, else MM:SS."""
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        if hours > 0:
+            return f"{hours}:{minutes:02d}:{seconds:02d}"
+        return f"{minutes:02d}:{seconds:02d}"
+
+    @staticmethod
     def calculate_time(started_at: datetime, duration_minutes: int) -> Dict[str, Any]:
         if not started_at:
             return {
@@ -16,7 +26,7 @@ class TimerService:
                 "duration_minutes": duration_minutes,
                 "remaining_seconds": duration_minutes * 60,
                 "is_expired": False,
-                "formatted_remaining": f"{duration_minutes}:00",
+                "formatted_remaining": TimerService._format_clock(duration_minutes * 60),
             }
 
         now = timezone.now()
@@ -25,9 +35,7 @@ class TimerService:
         remaining_seconds = max(0, int(remaining_td.total_seconds()))
         is_expired = remaining_seconds == 0
 
-        minutes = remaining_seconds // 60
-        seconds = remaining_seconds % 60
-        formatted_remaining = f"{minutes:02d}:{seconds:02d}"
+        formatted_remaining = TimerService._format_clock(remaining_seconds)
 
         return {
             "started_at": started_at.isoformat(),

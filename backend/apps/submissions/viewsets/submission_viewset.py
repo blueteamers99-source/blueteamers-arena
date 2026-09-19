@@ -68,27 +68,14 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         if question_id and answer_input:
             question = Question.objects.filter(id=question_id).first()
             if question:
-                # Enforce challenge timer: check if this question's challenge has expired
-                challenge_question = ChallengeQuestion.objects.filter(question=question).select_related('challenge').first()
-                if challenge_question:
-                    progress = ParticipantProgress.objects.filter(
-                        participant=participant, challenge=challenge_question.challenge
-                    ).first()
-                    if progress:
-                        if progress.status == ParticipantProgress.StatusChoices.EXPIRED:
-                            return Response(
-                                {"success": False, "message": "Challenge time has expired. Submission rejected."},
-                                status=status.HTTP_400_BAD_REQUEST,
-                            )
-                        if progress.status == ParticipantProgress.StatusChoices.IN_PROGRESS:
-                            remaining = progress.calculate_remaining_time_seconds()
-                            if remaining <= 0:
-                                progress.status = ParticipantProgress.StatusChoices.EXPIRED
-                                progress.save()
-                                return Response(
-                                    {"success": False, "message": "Challenge time has expired. Submission rejected."},
-                                    status=status.HTTP_400_BAD_REQUEST,
-                                )
+                # Enforce event-wide timer: the single event clock governs all
+                # challenges; there is no per-challenge time limit anymore.
+                event_remaining = participant.get_event_remaining_seconds()
+                if participant.started_at and event_remaining <= 0:
+                    return Response(
+                        {"success": False, "message": "Event time has expired. Submission rejected."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 # Unified grading (M-05): the single-question path uses the
                 # same AnswerValidationService as the challenge path, so
                 # "correct" means the same thing everywhere. Whole-keyword

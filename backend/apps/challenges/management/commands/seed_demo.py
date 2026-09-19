@@ -98,7 +98,7 @@ class Command(BaseCommand):
                     "college_name": ed["college_name"],
                     "workshop_name": ed["workshop_name"],
                     "event_date": ed["date"],
-                    "duration_minutes": 60,
+                    "duration_minutes": 150,
                     "passing_score": 600,
                     "total_challenges": 5,
                     "accent_color": ed["accent"],

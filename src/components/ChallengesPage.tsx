@@ -18,6 +18,8 @@ import {
   type MockEvent,
 } from "@/lib/mock-events";
 import { useEventCountdown } from "@/lib/useEventCountdown";
+import { API_BASE_URL } from "@/lib/config";
+import { studentAuthFetch } from "@/lib/auth";
 import {
   CHALLENGES,
   DIFFICULTY_BADGE,
@@ -42,11 +44,18 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
   const [search, setSearch] = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("All");
   // Same live event timer as the dashboard so both screens agree.
-  const { formatted: eventTimeLeft } = useEventCountdown();
+  const { formatted: eventTimeLeft, refresh: refreshEventClock } = useEventCountdown();
 
   useEffect(() => {
     setEv(getSelectedEvent());
     setProgress(getProgress());
+
+    // Arriving on the Challenges page IS the explicit start: begin the
+    // universal event clock (idempotent — no-op if already running), then
+    // re-sync so the ticking starts immediately, not after the next poll.
+    studentAuthFetch(`${API_BASE_URL}/dashboard/start-event-timer/`, { method: "POST" })
+      .then(() => refreshEventClock())
+      .catch(() => {});
 
     // Fetch live progress state from PostgreSQL backend.
     // A successful fetch is AUTHORITATIVE even when empty — a brand-new user
@@ -71,6 +80,7 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
         setChallenges(serverChallenges);
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const score = useMemo(() => computeScore(progress), [progress]);
@@ -131,7 +141,7 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
             icon={<Clock className={`h-4 w-4 ${accent.text}`} />}
             label="Time Remaining"
             value={eventTimeLeft}
-            sub="Minutes"
+            sub="Shared across all challenges"
           />
         </div>
 
@@ -199,10 +209,6 @@ export default function ChallengesPage({ hideNav }: { hideNav?: boolean } = {}) 
                     </p>
                   </div>
                   <div className="hidden shrink-0 items-center gap-6 text-right sm:flex">
-                    <div className="rounded-xl border border-border/60 bg-[var(--surface)]/80 px-4 py-2 text-center shadow-inner">
-                      <div className="text-xs font-semibold text-foreground">{c.duration} mins</div>
-                      <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mt-0.5">Duration</div>
-                    </div>
                     <div className="rounded-xl border border-border/60 bg-[var(--surface)]/80 px-4 py-2 text-center shadow-inner">
                       <div className="text-xs font-semibold text-foreground">{c.points} pts</div>
                       <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mt-0.5">Reward</div>
@@ -320,8 +326,8 @@ function DetailsModal({
 
         <div className="mt-6 grid grid-cols-3 gap-3 text-center">
           <div className="rounded-lg border border-border bg-[var(--surface)] p-3">
-            <div className="text-xs text-muted-foreground">Estimated Time</div>
-            <div className="mt-1 text-sm font-semibold">{challenge.duration} min</div>
+            <div className="text-xs text-muted-foreground">Event Window</div>
+            <div className="mt-1 text-sm font-semibold">2:30:00</div>
           </div>
           <div className="rounded-lg border border-border bg-[var(--surface)] p-3">
             <div className="text-xs text-muted-foreground">Max Points</div>

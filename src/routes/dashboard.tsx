@@ -104,7 +104,8 @@ const sidebarItems = [
 
 const rules = [
   "5 Challenges",
-  "60 Minutes Duration",
+  "One Event-Wide Timer: 2:30:00",
+  "Timer Starts on First Challenge",
   "One Attempt Only",
   "No Page Refresh / Back",
   "Auto Submit on Timeout",
@@ -170,7 +171,15 @@ function Dashboard() {
   // Single live event countdown, shared with the Challenges list so both
   // screens show the same remaining time (was previously two hardcoded, and
   // divergent, placeholder values).
-  const { formatted: eventTimeLeft } = useEventCountdown();
+  const { formatted: eventTimeLeft, isRunning: eventTimerRunning, refresh: refreshEventClock } = useEventCountdown();
+
+  // The event-wide clock starts ONLY on an explicit 'Start Challenge' click
+  // (never at registration or on dashboard load). Idempotent backend call.
+  const handleStartEventTimer = () => {
+    studentAuthFetch(`${API_BASE_URL}/dashboard/start-event-timer/`, { method: "POST" })
+      .then(() => refreshEventClock())
+      .catch(() => {});
+  };
 
   // Live state from PostgreSQL
   const [dashboardData, setDashboardData] = useState<StudentDashboard | null>(null);
@@ -451,10 +460,12 @@ function Dashboard() {
                 {/* Time Left Container */}
                 <div className="rounded-xl border border-border/80 bg-[var(--surface)] p-4 px-6 text-center shadow-inner backdrop-blur-sm min-w-[140px]">
                   <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Time Left</div>
-                  <div className="mt-1.5 flex items-center justify-center gap-2 text-2xl font-extrabold tracking-tight sm:text-3xl text-foreground">
-                    <Clock className={`h-5 w-5 animate-pulse ${accent.text}`} /> {eventTimeLeft}
+                  <div className={`mt-1.5 flex items-center justify-center gap-2 text-2xl font-extrabold tracking-tight sm:text-3xl text-foreground ${eventTimerRunning ? "" : "opacity-80"}`}>
+                    <Clock className={`h-5 w-5 ${eventTimerRunning ? "animate-pulse" : ""} ${accent.text}`} /> {eventTimeLeft}
                   </div>
-                  <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">Minutes</div>
+                  <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">
+                    {eventTimerRunning ? "Shared across all challenges" : "Timer not started — click Start Challenge"}
+                  </div>
                 </div>
               </div>
             </div>
@@ -494,7 +505,12 @@ function Dashboard() {
                 </div>
 
                 <button
-                  onClick={() => setRulesOpen(true)}
+                  onClick={() => {
+                    // Starting the challenge is what starts the universal
+                    // event clock — then take the student to the challenges.
+                    handleStartEventTimer();
+                    handleTabChange("Challenges");
+                  }}
                   className={`mt-6 inline-flex items-center justify-center gap-2 rounded-xl ${accent.bg} ${accent.hover} px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]`}
                 >
                   Start Challenge <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -509,7 +525,8 @@ function Dashboard() {
                     ["Event", ev?.workshop || "AI with SOC Workshop"],
                     ["College", ev?.college || "CBIT"],
                     ["Date", ev?.date || "22 July 2026"],
-                    ["Duration", ev?.duration || "60 Minutes"],
+                    ["Event Window", "2:30:00 (all challenges)"],
+                    ["Timer", "Starts on first challenge"],
                   ].map(([k, v]) => (
                     <div
                       key={k}
@@ -710,6 +727,9 @@ function Dashboard() {
             <button
               onClick={() => {
                 setRulesOpen(false);
+                // 'Start Competition' = explicit start click: begins the
+                // universal event clock, then opens the challenges list.
+                handleStartEventTimer();
                 handleTabChange("Challenges");
               }}
               className={`mt-8 block w-full rounded-xl ${accent.bg} ${accent.hover} px-5 py-3.5 text-center text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]`}
@@ -832,8 +852,8 @@ function DetailsModal({
         {/* 3 Metric Pills */}
         <div className="mt-6 grid grid-cols-3 gap-3 text-center">
           <div className="rounded-xl border border-border/60 bg-[var(--surface)] p-3.5 shadow-inner">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Estimated Time</div>
-            <div className="mt-1 text-base font-bold text-foreground">{challenge.duration} min</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Event Window</div>
+            <div className="mt-1 text-base font-bold text-foreground">2:30:00</div>
           </div>
           <div className="rounded-xl border border-border/60 bg-[var(--surface)] p-3.5 shadow-inner">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Max Points</div>
@@ -1028,6 +1048,12 @@ function CertificateModal({
             <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
               Certificate Locked
             </h1>
+            {certData?.name && (
+              <p className="text-xs text-muted-foreground">
+                Checking certificate for: <span className="font-semibold text-foreground">{certData.name}</span>
+                {certData.email ? <span className="text-muted-foreground/70"> ({certData.email})</span> : null}
+              </p>
+            )}
             <p className="max-w-md mx-auto text-sm text-muted-foreground leading-relaxed">
               {certData?.message ||
                 "Certificate unavailable. Complete all required challenges and reach the passing score to earn your certificate."}

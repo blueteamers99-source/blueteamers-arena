@@ -120,7 +120,7 @@ function VerifyPage() {
               </div>
               <div className="space-y-1">
                 <span className="text-muted-foreground">Final Score</span>
-                <p className="font-bold text-emerald-400">{data.score} PTS (Rank #{data.rank})</p>
+                <p className="font-bold text-emerald-400">{data.score} PTS</p>
               </div>
               <div className="space-y-1">
                 <span className="text-muted-foreground">Verification ID</span>
@@ -132,14 +132,10 @@ function VerifyPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-border/50">
+            <div className="pt-2 border-t border-border/50">
               <div className="text-xs text-muted-foreground space-y-0.5">
                 <p className="font-bold text-foreground">{data.issuer}</p>
-                <p>Digitally Signed & Validated via PostgreSQL</p>
               </div>
-              {data.qr_code_url && (
-                <img src={data.qr_code_url} alt="QR Code" className="h-16 w-16 rounded border border-border" />
-              )}
             </div>
 
             <div className="text-center pt-2">
@@ -149,7 +145,7 @@ function VerifyPage() {
                 disabled={downloading}
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground shadow-md hover:bg-primary/90 transition-all disabled:opacity-60"
               >
-                {downloading ? "Preparing certificate..." : "🎓 Download Official High-Res Vector PDF Certificate"}
+                {downloading ? "Preparing certificate..." : "🎓 Download your certificate"}
               </button>
             </div>
           </div>

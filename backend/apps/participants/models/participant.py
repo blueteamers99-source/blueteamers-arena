@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from apps.common.models.base import BaseModel
 from apps.events.models.event import Event
 
@@ -29,3 +30,18 @@ class Participant(BaseModel):
 
     def __str__(self):
         return f"{self.name} ({self.email}) - {self.event.event_code}"
+
+    def get_event_remaining_seconds(self) -> int:
+        """
+        Server-authoritative event-wide countdown. The single timer for the
+        whole event starts when the participant clicks 'Start Challenge'
+        (started_at set by ProgressService.start_challenge) and runs for
+        event.duration_minutes (2:30:00 by default) across ALL challenges.
+        If started_at is None the clock has not started yet and the full
+        window is returned.
+        """
+        duration_min = getattr(self.event, "duration_minutes", 150) or 150
+        if not self.started_at:
+            return int(duration_min * 60)
+        elapsed = (timezone.now() - self.started_at).total_seconds()
+        return max(0, int(duration_min * 60 - elapsed))

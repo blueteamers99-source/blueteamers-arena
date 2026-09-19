@@ -29,13 +29,13 @@ import {
   setStatus,
   saveProgressApi,
   submitChallengeApi,
-  fetchProgressApi,
   startChallengeApi,
   fetchChallengeDetailApi,
   type Challenge,
 } from "@/lib/mock-challenges";
 import { API_BASE_URL } from "@/lib/config";
-import { getStudentAccessToken } from "@/lib/auth";
+import { getStudentAccessToken, studentAuthFetch } from "@/lib/auth";
+import { useEventCountdown } from "@/lib/useEventCountdown";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import evidenceEmail from "@/assets/evidence-email.png";
 import evidenceUrl from "@/assets/evidence-url.png";
@@ -93,13 +93,6 @@ export const Route = createFileRoute("/challenge/play")({
   }),
 });
 
-function formatTime(sec: number) {
-  const h = Math.floor(sec / 3600).toString().padStart(2, "0");
-  const m = Math.floor((sec % 3600) / 60).toString().padStart(2, "0");
-  const s = Math.floor(sec % 60).toString().padStart(2, "0");
-  return `${h}:${m}:${s}`;
-}
-
 function PlayPage() {
   const navigate = useNavigate();
   const searchParams = Route.useSearch();
@@ -107,8 +100,13 @@ function PlayPage() {
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [current, setCurrent] = useState(0);
-  const [remaining, setRemaining] = useState(0);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  // Universal event-wide timer (2:30:00) shared with the dashboard and the
+  // challenges list. There is NO per-challenge timer anymore.
+  const { formatted: eventTimeLeft, refresh: refreshEventClock } = useEventCountdown();
+  // Universal score — the participant's total score across the whole event,
+  // identical on every challenge.
+  const [totalScore, setTotalScore] = useState<number | null>(null);
   const [activeEvidence, setActiveEvidence] = useState<string>("");
   const [peek, setPeek] = useState<{
     px: number;
@@ -215,9 +213,27 @@ function PlayPage() {
     const localChallenge = CHALLENGES.find((x) => x.id === activeId) ?? CHALLENGES[0];
     setChallenge(localChallenge);
     setEv(getSelectedEvent());
-    setRemaining(localChallenge.duration * 60);
     if (localChallenge.evidence?.length) setActiveEvidence(localChallenge.evidence[0].id);
     setAccessDenied(false);
+
+    // Opening a challenge workspace is an explicit start: kick the universal
+    // event clock (idempotent — no-op if already running), then re-sync so
+    // the countdown ticks immediately.
+    studentAuthFetch(`${API_BASE_URL}/dashboard/start-event-timer/`, { method: "POST" })
+      .then(() => refreshEventClock())
+      .catch(() => {});
+
+    // Fetch the universal event score once per workspace load
+    studentAuthFetch(`${API_BASE_URL}/dashboard/me/`)
+      .then((res) => res.json())
+      .then((payload: unknown) => {
+        if (payload && typeof payload === "object") {
+          const root = payload as Record<string, unknown>;
+          const scoreVal = typeof root.score === "number" ? root.score : (root.data as Record<string, unknown> | undefined)?.current_score;
+          if (typeof scoreVal === "number") setTotalScore(scoreVal);
+        }
+      })
+      .catch(() => {});
 
     // 1. Fetch live challenge definition if available.
     // A 403 means the backend rejected cross-event access — show the
@@ -239,13 +255,13 @@ function PlayPage() {
       }
     });
 
-    // 2. Fetch server-authoritative progress and resume state
+    // 2. Fetch server-authoritative progress and resume state.
+    // Also starts (or resumes) the universal event clock on the backend —
+    // idempotent: the clock first starts on the student's first click.
     startChallengeApi(activeId).then((progressState) => {
       if (progressState) {
-        // Restore server-calculated remaining time
-        if (typeof progressState.remaining_time_seconds === "number") {
-          setRemaining(progressState.remaining_time_seconds);
-        }
+        // Re-sync the universal event clock from the server
+        refreshEventClock();
 
         // Restore saved answers from server
         const restoredAnswers: Record<string, string> = {};
@@ -298,27 +314,6 @@ function PlayPage() {
       setStatus(activeId, "in_progress");
     }
   }, [searchParams.challengeId]);
-
-  // Server-authoritative timer countdown
-  useEffect(() => {
-    if (!challenge || completedChallenge) return;
-
-    // Local tick for smooth UI countdown
-    const localTick = setInterval(() => setRemaining((r) => (r > 0 ? r - 1 : 0)), 1000);
-
-    // Periodic server sync to correct drift across tabs / background throttling
-    const serverSync = setInterval(async () => {
-      const progress = await fetchProgressApi(challenge.id);
-      if (progress && typeof progress.remaining_time_seconds === "number") {
-        setRemaining(progress.remaining_time_seconds);
-      }
-    }, 10000); // Sync every 10 seconds
-
-    return () => {
-      clearInterval(localTick);
-      clearInterval(serverSync);
-    };
-  }, [challenge, completedChallenge]);
 
   // Debounced auto-save on answers or current question changes
   useEffect(() => {
@@ -590,7 +585,7 @@ function PlayPage() {
           <div className="flex items-center gap-2">
             <div className="hidden items-center gap-2 rounded-md border border-border bg-[var(--surface)] px-3 py-1.5 text-xs sm:flex">
               <Clock className={`h-3.5 w-3.5 ${accent.text}`} />
-              <span className="font-mono font-semibold">{formatTime(remaining)}</span>
+              <span className="font-mono font-semibold">{eventTimeLeft}</span>
             </div>
             <button
               onClick={end}
@@ -896,17 +891,16 @@ function PlayPage() {
           <Panel title="Timer">
             <div className="flex items-center gap-2">
               <Clock className={`h-4 w-4 ${accent.text}`} />
-              <span className="font-mono text-2xl font-bold">{formatTime(remaining)}</span>
+              <span className="font-mono text-2xl font-bold">{eventTimeLeft}</span>
             </div>
-            <div className="mt-1 text-xs text-muted-foreground">Time remaining</div>
+            <div className="mt-1 text-xs text-muted-foreground">Event time remaining — shared across all challenges</div>
           </Panel>
-          <Panel title="Current Score">
+          <Panel title="Total Score">
             <div className="flex items-center gap-2">
               <Trophy className={`h-4 w-4 ${accent.text}`} />
-              <span className="text-2xl font-bold">0</span>
-              <span className="text-xs text-muted-foreground">/ {challenge.points}</span>
+              <span className="text-2xl font-bold">{totalScore ?? 0}</span>
             </div>
-            <div className="mt-1 text-xs text-muted-foreground">Points available</div>
+            <div className="mt-1 text-xs text-muted-foreground">Your total score across all challenges</div>
           </Panel>
           <Panel title="Challenge Progress">
             <div className="flex items-center gap-2">
@@ -925,7 +919,7 @@ function PlayPage() {
           <Panel title="Challenge Info">
             <dl className="space-y-1.5 text-xs">
               <Row k="Difficulty" v={challenge.difficulty} />
-              <Row k="Duration" v={`${challenge.duration} min`} />
+              <Row k="Event Window" v="2:30:00 (all challenges)" />
               <Row k="Max Points" v={String(challenge.points)} />
               <Row k="Questions" v={String(questions.length)} />
             </dl>
