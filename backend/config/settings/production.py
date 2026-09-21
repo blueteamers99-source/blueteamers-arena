@@ -4,12 +4,14 @@ from django.core.exceptions import ImproperlyConfigured
 DEBUG = env.bool("DEBUG", default=False)
 
 # Secret Key from Environment Variable — MUST be set in production
-SECRET_KEY = env.str("DJANGO_SECRET_KEY", default=env.str("SECRET_KEY", default=SECRET_KEY))
+SECRET_KEY = env.str("DJANGO_SECRET_KEY", default=env.str("SECRET_KEY", default=""))
 if not SECRET_KEY or SECRET_KEY.startswith("django-insecure"):
     raise ImproperlyConfigured(
         "SECRET_KEY must be set to a secure random value in production. "
         "Generate one with: python -c \"from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())\""
     )
+
+SIMPLE_JWT["SIGNING_KEY"] = SECRET_KEY
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[
     "blueteamers-arena.onrender.com",
@@ -79,6 +81,7 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_REFERRER_POLICY = "same-origin"
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
 SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=True)
 CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=True)
