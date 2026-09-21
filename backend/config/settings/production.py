@@ -15,6 +15,8 @@ ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[
     "blueteamers-arena.onrender.com",
     "*.onrender.com",
     "*.vercel.app",
+    "*.railway.app",
+    "*.up.railway.app",
 ])
 
 # CSRF Trusted Origins

@@ -20,4 +20,4 @@ RUN mkdir -p /app/staticfiles /app/mediafiles
 
 EXPOSE 8000
 
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--threads", "2"]
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--threads", "2", "--log-level", "warning", "--access-logfile", "-", "--error-logfile", "-"]
