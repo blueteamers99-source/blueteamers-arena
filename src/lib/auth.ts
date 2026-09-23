@@ -23,11 +23,6 @@ const STUDENT_USER_KEY = "student_user";
 // key — removed during logout so stale tokens never survive.
 const LEGACY_STUDENT_TOKEN_KEYS = ["blueteamers_participant_token", "blueteamers_access_token"];
 
-// Admin Token Keys
-const ADMIN_ACCESS_KEY = "admin_access_token";
-const ADMIN_REFRESH_KEY = "admin_refresh_token";
-const ADMIN_USER_KEY = "admin_user";
-
 const isBrowser = typeof window !== "undefined" && typeof localStorage !== "undefined";
 
 // Student Auth Helpers
@@ -71,44 +66,8 @@ export const isStudentLoggedIn = (): boolean => {
   return !!user && (user.role === "STUDENT" || !user.role);
 };
 
-// Admin Auth Helpers
-export const setAdminAuth = (tokens: { access: string; refresh: string }, user: AuthUser) => {
-  if (!isBrowser) return;
-  localStorage.setItem(ADMIN_ACCESS_KEY, tokens.access);
-  localStorage.setItem(ADMIN_REFRESH_KEY, tokens.refresh);
-  localStorage.setItem(ADMIN_USER_KEY, JSON.stringify(user));
-};
-
-export const getAdminUser = (): AuthUser | null => {
-  if (!isBrowser) return null;
-  const raw = localStorage.getItem(ADMIN_USER_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-};
-
-export const getAdminAccessToken = (): string | null => {
-  if (!isBrowser) return null;
-  return localStorage.getItem(ADMIN_ACCESS_KEY);
-};
-
-export const clearAdminAuth = () => {
-  if (!isBrowser) return;
-  localStorage.removeItem(ADMIN_ACCESS_KEY);
-  localStorage.removeItem(ADMIN_REFRESH_KEY);
-  localStorage.removeItem(ADMIN_USER_KEY);
-};
-
-export const isAdminLoggedIn = (): boolean => {
-  const user = getAdminUser();
-  return !!user && (user.role === "ADMIN" || user.role === "SUPER_ADMIN");
-};
-
 // ---------------------------------------------------------------------------
-// authFetch factory — single implementation, two configurations
+// authFetch factory
 // ---------------------------------------------------------------------------
 
 interface AuthFetchConfig {
@@ -234,15 +193,6 @@ function createAuthFetch(config: AuthFetchConfig) {
     }
   };
 }
-
-/** Drop-in replacement for fetch() for admin pages. */
-export const authFetch = createAuthFetch({
-  tokenKey: ADMIN_ACCESS_KEY,
-  refreshKey: ADMIN_REFRESH_KEY,
-  refreshEndpoint: "/admin/refresh/",
-  loginUrl: "/admin/login",
-  clearAuth: clearAdminAuth,
-});
 
 /** Drop-in replacement for fetch() for student pages. */
 export const studentAuthFetch = createAuthFetch({

@@ -24,12 +24,6 @@ import { Route as ReviewRouteImport } from './routes/review'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudentRouteImport } from './routes/student'
 import { Route as VerifyRouteImport } from './routes/verify'
-import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
-import { Route as AdminEventsRouteImport } from './routes/admin.events'
-import { Route as AdminLoginRouteImport } from './routes/admin.login'
-import { Route as AdminParticipantsRouteImport } from './routes/admin.participants'
-import { Route as AdminQuestionsRouteImport } from './routes/admin.questions'
-import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as ChallengePlayRouteImport } from './routes/challenge.play'
 
 const IndexRoute = IndexRouteImport.update({
@@ -107,36 +101,6 @@ const VerifyRoute = VerifyRouteImport.update({
   path: '/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminDashboardRoute = AdminDashboardRouteImport.update({
-  id: '/admin/dashboard',
-  path: '/admin/dashboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminEventsRoute = AdminEventsRouteImport.update({
-  id: '/admin/events',
-  path: '/admin/events',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminLoginRoute = AdminLoginRouteImport.update({
-  id: '/admin/login',
-  path: '/admin/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminParticipantsRoute = AdminParticipantsRouteImport.update({
-  id: '/admin/participants',
-  path: '/admin/participants',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminQuestionsRoute = AdminQuestionsRouteImport.update({
-  id: '/admin/questions',
-  path: '/admin/questions',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminSettingsRoute = AdminSettingsRouteImport.update({
-  id: '/admin/settings',
-  path: '/admin/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ChallengePlayRoute = ChallengePlayRouteImport.update({
   id: '/challenge/play',
   path: '/challenge/play',
@@ -159,12 +123,6 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/student': typeof StudentRoute
   '/verify': typeof VerifyRoute
-  '/admin/dashboard': typeof AdminDashboardRoute
-  '/admin/events': typeof AdminEventsRoute
-  '/admin/login': typeof AdminLoginRoute
-  '/admin/participants': typeof AdminParticipantsRoute
-  '/admin/questions': typeof AdminQuestionsRoute
-  '/admin/settings': typeof AdminSettingsRoute
   '/challenge/play': typeof ChallengePlayRoute
 }
 export interface FileRoutesByTo {
@@ -183,12 +141,6 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/student': typeof StudentRoute
   '/verify': typeof VerifyRoute
-  '/admin/dashboard': typeof AdminDashboardRoute
-  '/admin/events': typeof AdminEventsRoute
-  '/admin/login': typeof AdminLoginRoute
-  '/admin/participants': typeof AdminParticipantsRoute
-  '/admin/questions': typeof AdminQuestionsRoute
-  '/admin/settings': typeof AdminSettingsRoute
   '/challenge/play': typeof ChallengePlayRoute
 }
 export interface FileRoutesById {
@@ -208,12 +160,6 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/student': typeof StudentRoute
   '/verify': typeof VerifyRoute
-  '/admin/dashboard': typeof AdminDashboardRoute
-  '/admin/events': typeof AdminEventsRoute
-  '/admin/login': typeof AdminLoginRoute
-  '/admin/participants': typeof AdminParticipantsRoute
-  '/admin/questions': typeof AdminQuestionsRoute
-  '/admin/settings': typeof AdminSettingsRoute
   '/challenge/play': typeof ChallengePlayRoute
 }
 export interface FileRouteTypes {
@@ -234,12 +180,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/student'
     | '/verify'
-    | '/admin/dashboard'
-    | '/admin/events'
-    | '/admin/login'
-    | '/admin/participants'
-    | '/admin/questions'
-    | '/admin/settings'
     | '/challenge/play'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -258,12 +198,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/student'
     | '/verify'
-    | '/admin/dashboard'
-    | '/admin/events'
-    | '/admin/login'
-    | '/admin/participants'
-    | '/admin/questions'
-    | '/admin/settings'
     | '/challenge/play'
   id:
     | '__root__'
@@ -282,12 +216,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/student'
     | '/verify'
-    | '/admin/dashboard'
-    | '/admin/events'
-    | '/admin/login'
-    | '/admin/participants'
-    | '/admin/questions'
-    | '/admin/settings'
     | '/challenge/play'
   fileRoutesById: FileRoutesById
 }
@@ -307,12 +235,6 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   StudentRoute: typeof StudentRoute
   VerifyRoute: typeof VerifyRoute
-  AdminDashboardRoute: typeof AdminDashboardRoute
-  AdminEventsRoute: typeof AdminEventsRoute
-  AdminLoginRoute: typeof AdminLoginRoute
-  AdminParticipantsRoute: typeof AdminParticipantsRoute
-  AdminQuestionsRoute: typeof AdminQuestionsRoute
-  AdminSettingsRoute: typeof AdminSettingsRoute
   ChallengePlayRoute: typeof ChallengePlayRoute
 }
 
@@ -423,48 +345,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/dashboard': {
-      id: '/admin/dashboard'
-      path: '/admin/dashboard'
-      fullPath: '/admin/dashboard'
-      preLoaderRoute: typeof AdminDashboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/events': {
-      id: '/admin/events'
-      path: '/admin/events'
-      fullPath: '/admin/events'
-      preLoaderRoute: typeof AdminEventsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/login': {
-      id: '/admin/login'
-      path: '/admin/login'
-      fullPath: '/admin/login'
-      preLoaderRoute: typeof AdminLoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/participants': {
-      id: '/admin/participants'
-      path: '/admin/participants'
-      fullPath: '/admin/participants'
-      preLoaderRoute: typeof AdminParticipantsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/questions': {
-      id: '/admin/questions'
-      path: '/admin/questions'
-      fullPath: '/admin/questions'
-      preLoaderRoute: typeof AdminQuestionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/settings': {
-      id: '/admin/settings'
-      path: '/admin/settings'
-      fullPath: '/admin/settings'
-      preLoaderRoute: typeof AdminSettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/challenge/play': {
       id: '/challenge/play'
       path: '/challenge/play'
@@ -491,12 +371,6 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   StudentRoute: StudentRoute,
   VerifyRoute: VerifyRoute,
-  AdminDashboardRoute: AdminDashboardRoute,
-  AdminEventsRoute: AdminEventsRoute,
-  AdminLoginRoute: AdminLoginRoute,
-  AdminParticipantsRoute: AdminParticipantsRoute,
-  AdminQuestionsRoute: AdminQuestionsRoute,
-  AdminSettingsRoute: AdminSettingsRoute,
   ChallengePlayRoute: ChallengePlayRoute,
 }
 export const routeTree = rootRouteImport

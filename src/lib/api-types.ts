@@ -75,34 +75,6 @@ export interface StudentDashboard {
   data: StudentDashboardDetail;
 }
 
-export interface AdminRecentEvent {
-  id?: string;
-  workshop_name: string;
-  college_name: string;
-  status: string;
-  event_date: string;
-  enrolled_participants?: number;
-  participants_count?: number;
-}
-
-export interface AdminDashboardSummary {
-  total_events: number;
-  live_events: number;
-  completed_events: number;
-  total_participants: number;
-  total_challenges: number;
-  total_questions: number;
-  average_score: number;
-  completion_rate: number;
-}
-
-export interface AdminDashboardData {
-  success?: boolean;
-  summary?: AdminDashboardSummary;
-  recent_events?: AdminRecentEvent[];
-  recent_activity?: string[];
-}
-
 export interface EventItem {
   id: string;
   college_name: string;
@@ -134,51 +106,6 @@ export interface ApprovedStudent {
   registered_email: string;
   has_joined: boolean;
   status: string;
-}
-
-export interface AdminQuestionItem {
-  id?: string;
-  question?: string;
-  question_text?: string;
-  prompt?: string;
-  category?: string;
-  difficulty?: string;
-  default_points?: number;
-  marks?: number;
-  status?: string;
-  options?: string[];
-  options_json?: string[] | string;
-  correct_option_index?: number;
-  correct?: number;
-  explanation?: string;
-}
-
-export interface QuestionImportItem {
-  question: string;
-  question_text?: string;
-  category?: string;
-  difficulty?: string;
-  default_points?: number;
-  marks?: number;
-  options?: string[];
-  correct?: number;
-}
-
-export interface AdminParticipantItem {
-  id?: string | number;
-  name?: string;
-  email?: string;
-  college_name?: string;
-  event_code?: string;
-  event?: {
-    college_name?: string;
-    event_code?: string;
-  };
-  score?: number;
-  completed?: number;
-  started_at?: string;
-  finished_at?: string;
-  created_at?: string;
 }
 
 export interface ChallengeResource {
