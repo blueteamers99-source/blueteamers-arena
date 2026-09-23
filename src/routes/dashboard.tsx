@@ -14,6 +14,8 @@ import {
   Sparkles,
   Flame,
   BarChart3,
+  Loader2,
+  ShieldAlert,
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
@@ -27,7 +29,7 @@ import {
 import ChallengesPage from "@/components/ChallengesPage";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { API_BASE_URL } from "@/lib/config";
-import { studentAuthFetch } from "@/lib/auth";
+import { studentAuthFetch, verifyAnyStudentSession, clearStudentAuth } from "@/lib/auth";
 import { useEventCountdown } from "@/lib/useEventCountdown";
 import { asString, extractRankings, extractResults, isRecord } from "@/lib/api-types";
 import type {
@@ -166,6 +168,11 @@ function Dashboard() {
   const [certLoading, setCertLoading] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [name, setName] = useState("Rahul");
+
+  // Layer 2 route guard state: the dashboard never renders until the server
+  // has proven the stored token is genuinely valid.
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authFailed, setAuthFailed] = useState(false);
   const [ev, setEv] = useState<MockEvent>(() => getSelectedEvent());
 
   // Single live event countdown, shared with the Challenges list so both
@@ -194,6 +201,11 @@ function Dashboard() {
   const [leaderboardFilter, setLeaderboardFilter] = useState<LeaderboardFilter>("All");
 
   useEffect(() => {
+    // Layer 2 gate: do not fire authenticated data fetches until the server
+    // has verified the session — avoids 401 spam and redirect races for
+    // unauthenticated visitors (who the guard below bounces anyway).
+    if (!authChecked) return;
+
     // Guard: redirect to /arena if user hasn't entered an event code in this session
     const eventCode = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("arena.selectedEventCode") : null;
     if (!eventCode) {
@@ -238,6 +250,30 @@ function Dashboard() {
         }
       })
       .catch((err) => console.error("Error fetching leaderboard:", err));
+  }, [authChecked]);
+
+  // Layer 2 — route guard: prove the session server-side before rendering.
+  // /dashboard is reachable through both login flows (user tokens via the
+  // auth card, participant tokens via the arena gate), so either token type
+  // accepted by the backend counts. A tampered client session (e.g. Burp
+  // rewriting the login response 400 -> 200) holds no token the server will
+  // accept, so it is bounced instead of rendering the shell with demo
+  // fallback data (the "ghost dashboard" finding).
+  useEffect(() => {
+    let cancelled = false;
+    verifyAnyStudentSession(true).then((ok) => {
+      if (cancelled) return;
+      if (ok) {
+        setAuthChecked(true);
+      } else {
+        setAuthFailed(true);
+        clearStudentAuth();
+        navigate({ to: "/arena" });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filteredChallenges = useMemo(() => {
@@ -313,6 +349,40 @@ function Dashboard() {
     if (top3.length === 3) return [top3[1], top3[0], top3[2]];
     return top3;
   }, [leaderboardItems]);
+
+  // Gate: never render the dashboard shell until the server has verified the
+  // session (or bounced the visitor). Prevents demo fallbacks from rendering
+  // for unauthenticated visitors.
+  if (!authChecked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span className="text-sm font-medium">Verifying your session…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (authFailed) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6">
+        <div className="w-full max-w-md rounded-xl border border-destructive/30 bg-destructive/10 p-8 text-center">
+          <ShieldAlert className="mx-auto h-10 w-10 text-destructive" />
+          <h1 className="mt-4 text-lg font-bold text-foreground">Session could not be verified</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            We could not confirm your registration for this event with the server. Please sign in again.
+          </p>
+          <button
+            onClick={() => navigate({ to: "/arena" })}
+            className="mt-6 w-full rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Back to Event Code
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen bg-background text-foreground overflow-hidden">

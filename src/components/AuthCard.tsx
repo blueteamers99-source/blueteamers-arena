@@ -14,7 +14,7 @@ import {
   Loader2,
   CheckCircle,
 } from "lucide-react";
-import { setStudentAuth } from "@/lib/auth";
+import { setStudentAuth, verifyServerSession } from "@/lib/auth";
 import { API_BASE_URL } from "@/lib/config";
 import "./AuthCard.css";
 
@@ -126,7 +126,16 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
       const data = await res.json();
       if (res.ok && data.success) {
         setStudentAuth(data.data.tokens, data.data.user);
-        navigate({ to: "/dashboard" });
+        // Server-verify before navigating: a tampered success response
+        // (e.g. Burp rewriting 400 -> 200) carries no token the backend
+        // accepts, so /auth/me/ fails and the user stays on the login form
+        // instead of entering a ghost session.
+        const verified = await verifyServerSession("user");
+        if (verified) {
+          navigate({ to: "/dashboard" });
+        } else {
+          setLoginError("Unable to establish a verified session. Please try again.");
+        }
       } else {
         setLoginError(data.message || "Invalid credentials.");
       }
@@ -178,7 +187,14 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
       const data = await res.json();
       if (res.ok && data.success) {
         setStudentAuth(data.data.tokens, data.data.user);
-        navigate({ to: "/dashboard" });
+        // Same anti-tampering check as login: only navigate once the server
+        // confirms the freshly minted token is genuinely valid.
+        const verified = await verifyServerSession("user");
+        if (verified) {
+          navigate({ to: "/dashboard" });
+        } else {
+          setSignupError("Account created, but the session could not be verified. Please sign in.");
+        }
       } else {
         const msg = data.message || (data.errors ? JSON.stringify(data.errors) : "Signup failed.");
         setSignupError(msg);

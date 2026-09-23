@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { User, Mail, AlertCircle, Loader2 } from "lucide-react";
 import { ACCENT_CLASSES, getSelectedEvent, saveStudentName, type Accent } from "@/lib/mock-events";
 import { API_BASE_URL } from "@/lib/config";
-import { setStudentAuth } from "@/lib/auth";
+import { setStudentAuth, verifyServerSession } from "@/lib/auth";
 
 export const Route = createFileRoute("/student")({
   component: Student,
@@ -66,23 +66,37 @@ function Student() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        saveStudentName(name.trim());
-        localStorage.setItem("user_email", email.trim().toLowerCase());
         const token = data.access || data.tokens?.access || data.participant_token || data.token;
         const refreshToken = data.refresh || data.tokens?.refresh || "";
-        if (token) {
-          const participant = data.data || data.participant || {};
-          setStudentAuth(
-            { access: token, refresh: refreshToken },
-            {
-              id: participant.id || "",
-              email: participant.email || email.trim().toLowerCase(),
-              username: participant.name || name.trim(),
-              role: "STUDENT",
-            }
-          );
-
+        if (!token) {
+          setError("Login succeeded but no session token was returned. Please contact support.");
+          setLoading(false);
+          return;
         }
+
+        // Server-verify BEFORE persisting anything: a tampered success
+        // response (Burp 400 -> 200 rewrite) carries no participant token the
+        // backend accepts, so /progress/ rejects it and the user stays on the
+        // login gate instead of a ghost dashboard.
+        const verified = await verifyServerSession("participant", false, token);
+        if (!verified) {
+          setError("You are not a registered user for this event. Only students who have registered can participate");
+          setLoading(false);
+          return;
+        }
+
+        saveStudentName(name.trim());
+        localStorage.setItem("user_email", email.trim().toLowerCase());
+        const participant = data.data || data.participant || {};
+        setStudentAuth(
+          { access: token, refresh: refreshToken },
+          {
+            id: participant.id || "",
+            email: participant.email || email.trim().toLowerCase(),
+            username: participant.name || name.trim(),
+            role: "STUDENT",
+          }
+        );
         navigate({ to: "/dashboard" });
       } else {
         setError(data.message || data.detail || "You are not a registered user for this event. Only students who have registered can participate");
