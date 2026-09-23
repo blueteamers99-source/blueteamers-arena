@@ -96,81 +96,35 @@ class EventViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="upload-students", permission_classes=[IsAdmin])
     def upload_students(self, request, pk=None):
-        import csv
-        import io
+        """
+        Bulk-upload the approved-student whitelist for one event.
+
+        Accepts either:
+          - .csv  (parsed with the stdlib csv module, UTF-8 with BOM tolerance)
+          - .xlsx (parsed with openpyxl in read-only streaming mode)
+
+        Both formats must contain 'Registered Name' and 'Registered Email'
+        columns (fuzzy header match). Rows are validated, de-duplicated by
+        email within the file, and inserted with ignore_conflicts=True so
+        re-uploads never error — existing (event, email) rows are skipped.
+
+        Delegates to the shared pipeline in student_import_service so this
+        endpoint and `python manage.py import_students` behave identically.
+        """
+        from apps.events.services.student_import_service import import_roster
+
         event = self.get_object()
         file_obj = request.FILES.get("file") or request.FILES.get("students")
         if not file_obj:
             return Response(
-                {"success": False, "message": "No CSV file uploaded. Please attach a students.csv file."},
+                {"success": False, "message": "No file uploaded. Please attach a students .csv or .xlsx file."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            content = file_obj.read().decode("utf-8-sig", errors="ignore")
-            stream = io.StringIO(content)
-            reader = csv.reader(stream)
-            headers = [h.strip().lower() for h in next(reader, [])]
-
-            name_idx = -1
-            email_idx = -1
-            for i, h in enumerate(headers):
-                if "name" in h:
-                    name_idx = i
-                elif "email" in h:
-                    email_idx = i
-
-            if name_idx == -1 or email_idx == -1:
-                return Response(
-                    {
-                        "success": False,
-                        "message": "CSV header must contain 'Registered Name' and 'Registered Email' columns.",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            from apps.events.models.approved_student import ApprovedStudent
-            created_objects = []
-            seen_emails = set()
-
-            for row in reader:
-                if not row or len(row) <= max(name_idx, email_idx):
-                    continue
-                name_val = row[name_idx].strip()
-                email_val = row[email_idx].strip().lower()
-
-                if name_val and email_val and "@" in email_val and email_val not in seen_emails:
-                    seen_emails.add(email_val)
-                    created_objects.append(
-                        ApprovedStudent(
-                            event=event,
-                            registered_name=name_val,
-                            registered_email=email_val,
-                        )
-                    )
-
-            if created_objects:
-                ApprovedStudent.objects.bulk_create(
-                    created_objects,
-                    ignore_conflicts=True,
-                )
-
-            total_count = ApprovedStudent.objects.filter(event=event).count()
-            return Response(
-                {
-                    "success": True,
-                    "imported_count": len(created_objects),
-                    "total_approved_students": total_count,
-                    "event_code": event.event_code,
-                    "message": f"Successfully imported {len(created_objects)} approved students for {event.event_code}.",
-                },
-                status=status.HTTP_200_OK,
-            )
-        except Exception as e:
-            return Response(
-                {"success": False, "message": f"Failed to parse CSV file: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        result = import_roster(file_obj, filename=file_obj.name, event=event)
+        if not result["success"]:
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get", "delete"], url_path="approved-students", permission_classes=[IsAdmin])
     def approved_students(self, request, pk=None):

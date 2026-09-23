@@ -34,7 +34,6 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
   const [rememberMe, setRememberMe] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
-  const [showAdminHint, setShowAdminHint] = useState(false);
 
   // Signup Form States
   const [fullName, setFullName] = useState("");
@@ -115,7 +114,6 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
-    setShowAdminHint(false);
     setLoginLoading(true);
 
     try {
@@ -129,15 +127,6 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
       if (res.ok && data.success) {
         setStudentAuth(data.data.tokens, data.data.user);
         navigate({ to: "/dashboard" });
-      } else if (
-        res.status === 401 &&
-        typeof data.message === "string" &&
-        data.message.toLowerCase().includes("admin portal")
-      ) {
-        // Backend role enforcement (H-10): valid credentials, but this
-        // account is an admin/super-admin. Offer the admin portal.
-        setShowAdminHint(true);
-        setLoginError(data.message);
       } else {
         setLoginError(data.message || "Invalid credentials.");
       }
@@ -222,18 +211,6 @@ export function AuthCard({ initialMode = "login" }: AuthCardProps) {
           <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-medium text-red-400">
             <AlertCircle className="h-4 w-4 shrink-0" />
             {loginError}
-          </div>
-        )}
-
-        {showAdminHint && (
-          <div className="mb-4 flex items-center justify-between gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 text-xs font-medium text-amber-400">
-            <span>Administrator account detected.</span>
-            <Link
-              to="/admin/login"
-              className="shrink-0 rounded-md bg-amber-500/20 px-2.5 py-1 font-semibold text-amber-300 hover:bg-amber-500/30 transition-colors"
-            >
-              Go to Admin Portal →
-            </Link>
           </div>
         )}
 
