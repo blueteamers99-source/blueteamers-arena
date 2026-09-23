@@ -202,3 +202,74 @@ export const studentAuthFetch = createAuthFetch({
   loginUrl: "/login",
   clearAuth: clearStudentAuth,
 });
+
+// ---------------------------------------------------------------------------
+// Server-side session verification (anti response-tampering guard)
+// ---------------------------------------------------------------------------
+
+async function verifyTokenAgainstEndpoint(
+  endpoint: string,
+  allowRefresh: boolean,
+  tokenOverride?: string,
+): Promise<boolean> {
+  if (!isBrowser) return false;
+  const token = tokenOverride ?? localStorage.getItem(STUDENT_ACCESS_KEY);
+  if (!token) return false;
+
+  try {
+    // allowRefresh=true routes through studentAuthFetch so an expired access
+    // token is silently refreshed (and a dead refresh token redirects to
+    // /login). Fresh-login flows pass false: the token was just minted and a
+    // plain fetch avoids any redirect side effects during the login handler.
+    const doFetch = allowRefresh && !tokenOverride ? studentAuthFetch : fetch;
+    const res = await doFetch(`${API_BASE_URL}${endpoint}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return false;
+    const body: unknown = await res.json().catch(() => null);
+    // Backend contract: success_response() wraps every success as {success: true}.
+    return (
+      !!body &&
+      typeof body === "object" &&
+      (body as { success?: unknown }).success === true
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Proves the stored student token is genuinely valid by calling a real
+ * protected endpoint. The server verifies the JWT cryptographically, so a
+ * tampered login response (e.g. Burp rewriting 400 -> 200) can never pass:
+ * such responses carry no token the backend will accept.
+ *
+ * Routing rule: the two token types are NOT interchangeable.
+ *  - "user" tokens come from /auth/login and /auth/signup and only
+ *    authenticate on /auth/me/ (SimpleJWT).
+ *  - "participant" tokens come from /participants/register-student and
+ *    carry a participant_id claim, authenticating only on /progress/
+ *    (ParticipantTokenAuthentication).
+ */
+export function verifyServerSession(
+  kind: "user" | "participant",
+  allowRefresh = false,
+  tokenOverride?: string,
+): Promise<boolean> {
+  return verifyTokenAgainstEndpoint(
+    kind === "user" ? "/auth/me/" : "/progress/",
+    allowRefresh,
+    tokenOverride,
+  );
+}
+
+/**
+ * Dashboard guard helper: /dashboard is reachable through both login flows
+ * (user tokens via the AuthCard, participant tokens via the arena gate), so
+ * accept either token type as long as the server accepts one of them.
+ */
+export async function verifyAnyStudentSession(allowRefresh = false): Promise<boolean> {
+  const isParticipant = await verifyServerSession("participant", allowRefresh);
+  if (isParticipant) return true;
+  return verifyServerSession("user", allowRefresh);
+}
