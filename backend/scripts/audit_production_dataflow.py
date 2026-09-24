@@ -173,7 +173,12 @@ try:
         }
     )
     ChallengeQuestion.objects.get_or_create(challenge=c1, question=q_test, defaults={"position": 1})
-    
+
+    # Mirror the real flow: the workspace click starts the event-wide clock.
+    # Without it, the never-started guard rejects submissions by design.
+    if akhil.started_at is None:
+        ProgressService.start_event_clock(akhil)
+
     # Submit correct answer
     akhil_initial_score = akhil.score
     res_sub = ProgressService.submit_challenge(akhil, c1, {str(q_test.id): "evil.com"})

@@ -134,6 +134,13 @@ class SecurityRemediationTestCase(TestCase):
         response = self.client.get("/api/v1/admin/dashboard/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+    @staticmethod
+    def _start_event_clock(participant):
+        """Mirror the real flow: opening a workspace starts the event clock."""
+        from django.utils import timezone as tz
+        participant.started_at = tz.now()
+        participant.save(update_fields=["started_at"])
+
     # -------------------------------------------------------------
     # F-01: Google OAuth Server-side Verification
     # -------------------------------------------------------------
@@ -159,6 +166,7 @@ class SecurityRemediationTestCase(TestCase):
     # -------------------------------------------------------------
     def test_empty_challenge_submission_no_full_score(self):
         """TEST 6: Empty challenge submission awards 0 points."""
+        self._start_event_clock(self.participant_a)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
         response = self.client.post(
             f"/api/v1/challenges/{self.challenge_a1.slug}/submit/",
@@ -171,6 +179,7 @@ class SecurityRemediationTestCase(TestCase):
 
     def test_correct_answer_awards_points(self):
         """TEST 7: Submitting ground-truth answer calculates and awards points."""
+        self._start_event_clock(self.participant_a)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
         response = self.client.post(
             f"/api/v1/challenges/{self.challenge_a1.slug}/submit/",
@@ -183,6 +192,7 @@ class SecurityRemediationTestCase(TestCase):
 
     def test_wrong_answer_awards_zero_points(self):
         """TEST 8: Submitting wrong answer gives 0 points."""
+        self._start_event_clock(self.participant_a)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
         response = self.client.post(
             f"/api/v1/challenges/{self.challenge_a1.slug}/submit/",
@@ -195,6 +205,7 @@ class SecurityRemediationTestCase(TestCase):
 
     def test_duplicate_submission_does_not_inflate_score(self):
         """TEST 9: Submitting the same correct challenge twice does not double score."""
+        self._start_event_clock(self.participant_a)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
         # Submission 1
         self.client.post(

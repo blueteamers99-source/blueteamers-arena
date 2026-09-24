@@ -29,11 +29,17 @@ class SubmissionService:
 
             # 2b. Validate Event-Wide Timer — the single event clock governs
             # all challenges; there is no per-challenge time limit anymore.
+            # A participant who NEVER started the clock cannot submit at all:
+            # otherwise the 2:30:00 window could be bypassed indefinitely.
+            if not participant.started_at:
+                raise ValidationError(
+                    "Event timer has not started. Open a challenge to start the 2:30:00 window before submitting."
+                )
             event_remaining = participant.get_event_remaining_seconds()
-            if participant.started_at and event_remaining <= 0:
+            if event_remaining <= 0:
+                # Mark all in-progress work expired for this participant.
                 ParticipantProgress.objects.filter(
                     participant=participant,
-                    challenge=challenge,
                     status=ParticipantProgress.StatusChoices.IN_PROGRESS,
                 ).update(status=ParticipantProgress.StatusChoices.EXPIRED)
                 raise ValidationError("Event time has expired. Submission rejected.")

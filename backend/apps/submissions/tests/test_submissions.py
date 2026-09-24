@@ -1,4 +1,5 @@
 from datetime import date
+from django.utils import timezone
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -53,6 +54,10 @@ class SubmissionsAPITests(TestCase):
 
     def test_submit_challenge_answers(self):
         self.client.credentials(HTTP_X_PARTICIPANT_TOKEN=self.token)
+        # Real flow: the workspace click starts the event-wide clock before
+        # any submission is accepted.
+        self.participant.started_at = timezone.now()
+        self.participant.save(update_fields=["started_at"])
         payload = {
             "answers": {
                 str(self.question.id): "payroll-secure-verify.com"
