@@ -16,6 +16,16 @@ class LeaderboardService:
         search_query: Optional[str] = None,
         student_participant: Optional[Participant] = None,
     ) -> Dict[str, Any]:
+        """
+        Build the full leaderboard payload for ONE event.
+
+        PRIVACY CONTRACT (rows are PII-minimal by design):
+        Rows contain ONLY rank, name, score, completed, time_taken,
+        is_current_user, is_finished. No email (masked or otherwise), no
+        participant_id, no per-row college_name / event_code. Search matches
+        NAMES only — matching on email would turn the search box into an
+        email-verification oracle even without displaying addresses.
+        """
         if not event:
             if event_id:
                 event = get_object_or_404(Event, id=event_id)
@@ -58,8 +68,10 @@ class LeaderboardService:
         )
 
         if search_query:
+            # Name-only matching: email matching would let anyone confirm a
+            # specific person's participation without ever displaying emails.
             q = search_query.strip()
-            qs = qs.filter(name__icontains=q) | qs.filter(email__icontains=q)
+            qs = qs.filter(name__icontains=q)
 
         ranked_list: List[Dict[str, Any]] = []
         for index, p in enumerate(qs, start=1):
@@ -71,19 +83,10 @@ class LeaderboardService:
                 time_display = f"{mins:02d}:{secs:02d}"
 
             is_curr = bool(student_participant and p.id == student_participant.id)
-            if is_curr:
-                display_email = p.email
-            else:
-                parts = p.email.split("@")
-                display_email = f"{parts[0][:2]}***@{parts[1]}" if len(parts) == 2 and len(parts[0]) >= 2 else f"***@{parts[-1]}" if len(parts) == 2 else "***"
 
             ranked_list.append({
                 "rank": index,
-                "participant_id": str(p.id),
                 "name": p.name,
-                "email": display_email,
-                "college_name": p.event.college_name,
-                "event_code": p.event.event_code,
                 "score": p.score,
                 "completed": p.completed,
                 "time_taken": time_display,
@@ -147,7 +150,7 @@ class LeaderboardService:
         nearby_rankings = []
         if student_participant:
             for idx, r in enumerate(ranked_list):
-                if r["participant_id"] == str(student_participant.id):
+                if r["is_current_user"]:
                     student_position = r
                     start_idx = max(0, idx - 2)
                     end_idx = min(len(ranked_list), idx + 3)

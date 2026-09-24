@@ -2,12 +2,13 @@ from rest_framework import serializers
 
 
 class LeaderboardEntrySerializer(serializers.Serializer):
+    """
+    PII-minimal leaderboard row. Deliberately EXCLUDES: email (even masked),
+    participant_id, per-row college_name / event_code — the board is scoped
+    to one event whose college/code live at the payload top level.
+    """
     rank = serializers.IntegerField()
-    participant_id = serializers.CharField()
     name = serializers.CharField()
-    email = serializers.CharField()
-    college_name = serializers.CharField()
-    event_code = serializers.CharField()
     score = serializers.IntegerField()
     completed = serializers.IntegerField()
     time_taken = serializers.CharField()

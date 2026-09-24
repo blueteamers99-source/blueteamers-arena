@@ -2,22 +2,17 @@
 // Field names mirror the serializer output. Optional fields exist where the
 // backend may omit a value.
 
+// PII-minimal leaderboard row (backend privacy contract): the API deliberately
+// returns NO email, NO participant_id, and NO per-row college/event fields.
+// The board is scoped to one event whose college/code live on the payload.
 export interface LeaderboardEntry {
   rank: number;
-  participant_id: string | number;
   name: string;
-  email: string;
-  college_name: string;
-  event_code: string;
   score: number;
   completed: number;
   time_taken: string;
   is_current_user: boolean;
   is_finished?: boolean;
-  // Not part of the current serializer contract; preserved only because the
-  // leaderboard "Currently Active" stat reads it. Remove once the backend
-  // exposes real activity/status data.
-  is_active?: boolean;
 }
 
 export interface LeaderboardPayload {

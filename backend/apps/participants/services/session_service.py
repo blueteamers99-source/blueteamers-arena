@@ -13,7 +13,12 @@ class SessionService:
         return cls.signer.sign(data)
 
     @classmethod
-    def verify_participant_token(cls, token: str, max_age_seconds: int = 86400) -> Participant:
+    def verify_participant_token(
+        cls,
+        token: str,
+        max_age_seconds: int = 86400,
+        allowed_statuses=None,
+    ) -> Participant:
         if not token:
             raise AuthenticationFailed("Participant authentication token missing.")
 
@@ -31,8 +36,13 @@ class SessionService:
         except Participant.DoesNotExist:
             raise AuthenticationFailed("Participant account not found.")
 
-        # Validate Event Status
-        if participant.event.status != Event.StatusChoices.LIVE:
+        # Validate Event Status. Default policy: LIVE only — challenge,
+        # progress and certificate endpoints must die with the event. The
+        # leaderboard widens this to Completed events so final standings stay
+        # viewable after the run ends (see LeaderboardTokenAuthentication).
+        if allowed_statuses is None:
+            allowed_statuses = [Event.StatusChoices.LIVE]
+        if participant.event.status not in allowed_statuses:
             raise AuthenticationFailed(f"Event '{participant.event.college_name}' is currently {participant.event.status.lower()}.")
 
         return participant
