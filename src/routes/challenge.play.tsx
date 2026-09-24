@@ -103,7 +103,11 @@ function PlayPage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   // Universal event-wide timer (2:30:00) shared with the dashboard and the
   // challenges list. There is NO per-challenge timer anymore.
-  const { formatted: eventTimeLeft, refresh: refreshEventClock } = useEventCountdown();
+  const { formatted: eventTimeLeft, seconds: eventSecondsLeft, refresh: refreshEventClock } = useEventCountdown();
+  // Hard client-side lock once the server says time is up. The server also
+  // rejects every write after expiry — this screen just mirrors that state so
+  // students see WHY inputs are disabled instead of hitting server errors.
+  const timeUp = eventSecondsLeft !== null && eventSecondsLeft <= 0;
   // Universal score — the participant's total score across the whole event,
   // identical on every challenge.
   const [totalScore, setTotalScore] = useState<number | null>(null);
@@ -201,6 +205,9 @@ function PlayPage() {
   answersRef.current = answers;
   const currentRef = useRef(current);
   currentRef.current = current;
+  // Mirror of timeUp for the unload handler (avoids stale closure).
+  const timeUpRef = useRef(timeUp);
+  timeUpRef.current = timeUp;
 
   useEffect(() => {
     const eventCode = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("arena.selectedEventCode") : null;
@@ -317,7 +324,7 @@ function PlayPage() {
 
   // Debounced auto-save on answers or current question changes
   useEffect(() => {
-    if (!initialLoadedRef.current || !challenge || completedChallenge) return;
+    if (!initialLoadedRef.current || !challenge || completedChallenge || timeUp) return;
     setSaveStatus("saving");
     const timer = setTimeout(async () => {
       const ok = await saveProgressApi(
@@ -341,7 +348,7 @@ function PlayPage() {
   // Uses keepalive fetch so the browser won't cancel the request on tab close.
   useEffect(() => {
     const handleUnload = () => {
-      if (challenge && initialLoadedRef.current && !completedChallenge) {
+      if (challenge && initialLoadedRef.current && !completedChallenge && !timeUpRef.current) {
         const token = getStudentAccessToken();
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
@@ -423,6 +430,38 @@ function PlayPage() {
     );
   }
 
+  // Time's-up lock: the event window has expired. Server mirrors this by
+  // rejecting every write — this screen makes the state visible and final.
+  if (timeUp && !completedChallenge) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="max-w-md text-center">
+          <Clock className="mx-auto h-12 w-12 text-rose-400" />
+          <h2 className="mt-4 text-xl font-semibold">Time's Up — Event Window Closed</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            The 2:30:00 event timer has run out. Answering, saving and submitting are now locked
+            across all challenges. Any answers already submitted before the deadline were graded
+            and counted.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={() => navigate({ to: "/leaderboard" })}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            >
+              <Trophy className="h-4 w-4" /> View Leaderboard
+            </button>
+            <button
+              onClick={() => navigate({ to: "/dashboard" })}
+              className="inline-flex items-center justify-center rounded-md border border-border bg-[var(--surface)] px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   if (completedChallenge) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -469,6 +508,11 @@ function PlayPage() {
     : "";
 
   const submit = async () => {
+    // Guard: time's up — the server rejects all writes after expiry anyway.
+    if (timeUp) {
+      alert("Time is up! The 2:30:00 event window has ended. Your answers can no longer be submitted.");
+      return;
+    }
     // Guard: prevent submitting with no answers at all.
     if (questions.length > 0 && answered === 0) {
       alert("You must answer at least one question before submitting. Unanswered questions are marked as incorrect.");
@@ -803,7 +847,8 @@ function PlayPage() {
                     onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
                     placeholder="Type your answer..."
                     rows={4}
-                    className="mt-3 w-full resize-none rounded-md border border-border bg-[var(--surface)] px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-blue-500/60"
+                    disabled={timeUp}
+                    className="mt-3 w-full resize-none rounded-md border border-border bg-[var(--surface)] px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-blue-500/60 disabled:cursor-not-allowed disabled:opacity-50"
                   />
                 ) : (
                   <div className="mt-3 space-y-2">
@@ -822,6 +867,7 @@ function PlayPage() {
                             name={q.id}
                             checked={active}
                             onChange={() => setAnswers((a) => ({ ...a, [q.id]: opt }))}
+                            disabled={timeUp}
                             className="accent-blue-500"
                           />
                           {opt}
@@ -848,7 +894,8 @@ function PlayPage() {
             </button>
             <button
               onClick={saveProgress}
-              className={`inline-flex items-center gap-2 rounded-md border border-border bg-[var(--surface)] px-4 py-2 text-sm font-medium transition-colors ${
+              disabled={timeUp}
+              className={`inline-flex items-center gap-2 rounded-md border border-border bg-[var(--surface)] px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                 saveStatus === "saved"
                   ? "text-emerald-400 border-emerald-500/40"
                   : saveStatus === "saving"
@@ -877,7 +924,8 @@ function PlayPage() {
             ) : (
               <button
                 onClick={submit}
-                className={`inline-flex items-center gap-2 rounded-md ${accent.bg} ${accent.hover} px-4 py-2 text-sm font-semibold text-white`}
+                disabled={timeUp}
+                className={`inline-flex items-center gap-2 rounded-md ${accent.bg} ${accent.hover} px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 Submit Challenge <ArrowRight className="h-4 w-4" />
               </button>

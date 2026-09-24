@@ -15,11 +15,38 @@ class ProgressService:
     EVENT_DURATION_MINUTES = 150
 
     @staticmethod
+    def _event_expired(participant: Participant) -> bool:
+        """True once the event-wide clock has run out (started and exhausted)."""
+        return bool(
+            participant.started_at
+            and participant.get_event_remaining_seconds() <= 0
+        )
+
+    @staticmethod
+    def _enforce_event_active(participant: Participant, action: str = "submit") -> None:
+        """
+        Hard server-side gate for ALL write actions (start, save, submit).
+        The frontend timer is cosmetic; this is the actual wall. Raises 403-class
+        PermissionDenied when the event-wide clock has expired.
+        """
+        if ProgressService._event_expired(participant):
+            raise PermissionDenied(
+                f"Event time has expired. You can no longer {action} answers — the 2:30:00 window is over."
+            )
+
+    @staticmethod
     def start_event_clock(participant: Participant):
         """
         Idempotently start the event-wide clock on an explicit 'Start
         Challenge' click. Registration does NOT start the timer.
+        The clock may only start while the event is LIVE — this is the gate
+        that prevents a Completed/Upcoming event from ever getting a running
+        window.
         """
+        if participant.event.status != "Live":
+            raise PermissionDenied(
+                f"Event is {participant.event.status.lower()}. The event clock can only start while the event is Live."
+            )
         if participant.started_at is None:
             Participant.objects.filter(pk=participant.pk, started_at__isnull=True).update(
                 started_at=timezone.now()
@@ -36,8 +63,11 @@ class ProgressService:
     def start_challenge(participant: Participant, challenge: Challenge) -> Dict[str, Any]:
         ProgressService._verify_event_access(participant, challenge)
 
-        # The event-wide clock starts (or resumes — idempotent) only here,
-        # on an explicit 'Start Challenge' click. Registration never starts it.
+        # Expired events are read-only: no (re)starting the clock, no new work.
+        if ProgressService._event_expired(participant):
+            return ProgressService.get_challenge_progress(participant, challenge)
+
+        # start_event_clock enforces the Live-status gate itself.
         ProgressService.start_event_clock(participant)
 
         duration_min = getattr(challenge, "duration_minutes", 20) or 20
@@ -166,6 +196,12 @@ class ProgressService:
     ) -> Dict[str, Any]:
         ProgressService._verify_event_access(participant, challenge)
 
+        # Hard gate: expired event → no saving answers (read-only board).
+        # We return the CURRENT progress untouched instead of raising, so the
+        # client's periodic auto-save degrades gracefully after expiry.
+        if ProgressService._event_expired(participant):
+            return ProgressService.get_challenge_progress(participant, challenge)
+
         duration_min = getattr(challenge, "duration_minutes", 20) or 20
         total_points = getattr(challenge, "points", 100) or 100
 
@@ -234,6 +270,12 @@ class ProgressService:
     ) -> Dict[str, Any]:
         ProgressService._verify_event_access(participant, challenge)
 
+        # Hard gate: expired event → do NOT write the draft. Return the
+        # current progress so the client's auto-save degrades gracefully.
+        # (Must run BEFORE the ParticipantDraftAnswer write below.)
+        if ProgressService._event_expired(participant):
+            return ProgressService.get_challenge_progress(participant, challenge)
+
         try:
             question = Question.objects.get(id=question_id)
         except (Question.DoesNotExist, ValueError):
@@ -266,6 +308,11 @@ class ProgressService:
     @staticmethod
     def submit_challenge(participant: Participant, challenge: Challenge, answers_override: Dict[str, Any] = None) -> Dict[str, Any]:
         ProgressService._verify_event_access(participant, challenge)
+
+        # Hard gate: expired event → reject ALL new submissions up front.
+        # (SubmissionService re-checks inside its transaction; this gives a
+        # clean, early failure for the challenge-path submit.)
+        ProgressService._enforce_event_active(participant, action="submit")
 
         # Retrieve saved answers if override not provided
         progress = ParticipantProgress.objects.filter(

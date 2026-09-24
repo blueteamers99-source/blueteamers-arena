@@ -223,6 +223,55 @@ class ChallengeResumeAutoSaveTests(TestCase):
         self.assertIsNotNone(self.participant.started_at)
 
     # -------------------------------------------------------------
+    # TEST 6c: Event-wide expiry is a HARD server-side wall — submit
+    # rejected once the 2:30:00 window runs out, even while event is Live.
+    # -------------------------------------------------------------
+    def test_submit_rejected_after_event_window_expires(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        # Start the clock, then run it out (default 150-min window, 151 min ago)
+        self.client.post(f"/api/v1/challenges/{self.challenge1.slug}/start/")
+        Participant.objects.filter(pk=self.participant.pk).update(
+            started_at=timezone.now() - timedelta(minutes=151)
+        )
+
+        answers_payload = {
+            str(self.q1.id): "evil-bank.com",
+            str(self.q2.id): "https://evil-bank.com/login",
+            str(self.q3.id): "198.51.100.24",
+            str(self.q4.id): "Spear phishing",
+        }
+        sub_resp = self.client.post(
+            f"/api/v1/challenges/{self.challenge1.slug}/submit/",
+            {"answers": answers_payload},
+            format="json",
+        )
+        self.assertEqual(sub_resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.participant.refresh_from_db()
+        self.assertEqual(self.participant.score, 0)
+        self.assertEqual(self.participant.completed, 0)
+
+    # -------------------------------------------------------------
+    # TEST 6d: A participant who NEVER started the clock cannot submit —
+    # the window cannot be bypassed by skipping the Start click.
+    # -------------------------------------------------------------
+    def test_submit_rejected_when_clock_never_started(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+        self.assertIsNone(self.participant.started_at)
+
+        answers_payload = {str(self.q1.id): "evil-bank.com"}
+        sub_resp = self.client.post(
+            f"/api/v1/challenges/{self.challenge1.slug}/submit/",
+            {"answers": answers_payload},
+            format="json",
+        )
+        self.assertEqual(sub_resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.participant.refresh_from_db()
+        self.assertEqual(self.participant.score, 0)
+
+    # -------------------------------------------------------------
     # TEST 7: Cross-Participant Access Rejected
     # -------------------------------------------------------------
     def test_cross_participant_progress_isolation(self):
@@ -248,6 +297,9 @@ class ChallengeResumeAutoSaveTests(TestCase):
     # -------------------------------------------------------------
     def test_submission_and_duplicate_score_prevention(self):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        # Real flow: opening the workspace starts the event-wide clock first.
+        self.client.post(f"/api/v1/challenges/{self.challenge1.slug}/start/")
 
         # Submit all 4 correct answers
         answers_payload = {

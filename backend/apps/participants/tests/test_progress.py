@@ -1,6 +1,7 @@
-from datetime import date
+from datetime import date, timedelta
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework import status
 from apps.events.models.event import Event
@@ -53,8 +54,14 @@ class ProgressAPITests(TestCase):
         self.submit_url = reverse("student-progress-submit", kwargs={"challenge_slug": "phishnet"})
         self.retrieve_url = reverse("student-progress-detail", kwargs={"challenge_slug": "phishnet"})
 
+    def _start_clock(self):
+        """Mirror the real flow: the workspace click starts the event clock."""
+        self.participant.started_at = timezone.now()
+        self.participant.save(update_fields=["started_at"])
+
     def test_save_draft_and_retrieve_progress(self):
         self.client.credentials(HTTP_X_PARTICIPANT_TOKEN=self.token)
+        self._start_clock()
         payload = {
             "question_id": str(self.question.id),
             "answer_text": "payroll-secure-verify.com",
@@ -71,6 +78,7 @@ class ProgressAPITests(TestCase):
 
     def test_submit_challenge(self):
         self.client.credentials(HTTP_X_PARTICIPANT_TOKEN=self.token)
+        self._start_clock()
         # 1. Save correct draft answer first
         self.client.post(self.save_draft_url, {
             "question_id": str(self.question.id),
@@ -88,3 +96,65 @@ class ProgressAPITests(TestCase):
         self.participant.refresh_from_db()
         self.assertEqual(self.participant.score, 100)
         self.assertEqual(self.participant.completed, 1)
+
+    def test_submit_rejected_when_event_timer_expired(self):
+        """The 2:30:00 window is a hard server-side wall: once the event-wide
+        clock runs out, submit must be rejected even though the event is
+        still marked Live and the UI timer now shows --:--:--."""
+        self.client.credentials(HTTP_X_PARTICIPANT_TOKEN=self.token)
+        # Clock started 61 minutes ago on a 60-minute event → expired.
+        self.participant.started_at = timezone.now() - timedelta(minutes=61)
+        self.participant.save(update_fields=["started_at"])
+
+        self.client.post(self.save_draft_url, {
+            "question_id": str(self.question.id),
+            "answer_text": "payroll-secure-verify.com",
+            "current_question_index": 0,
+        }, format="json")
+
+        res_sub = self.client.post(self.submit_url)
+        self.assertEqual(res_sub.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("expired", str(res_sub.data["message"]).lower())
+
+        # Nothing was graded or scored after the deadline.
+        self.participant.refresh_from_db()
+        self.assertEqual(self.participant.score, 0)
+        self.assertEqual(self.participant.completed, 0)
+
+    def test_draft_save_is_noop_after_expiry(self):
+        """Auto-save after expiry must not write any new answers."""
+        self.client.credentials(HTTP_X_PARTICIPANT_TOKEN=self.token)
+        self._start_clock()
+        # Save one answer BEFORE expiry
+        self.client.post(self.save_draft_url, {
+            "question_id": str(self.question.id),
+            "answer_text": "before-deadline.com",
+            "current_question_index": 0,
+        }, format="json")
+
+        # Expire the clock, then attempt another save
+        self.participant.started_at = timezone.now() - timedelta(minutes=61)
+        self.participant.save(update_fields=["started_at"])
+        res = self.client.post(self.save_draft_url, {
+            "question_id": str(self.question.id),
+            "answer_text": "after-deadline.com",
+            "current_question_index": 0,
+        }, format="json")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        res_get = self.client.get(self.retrieve_url)
+        saved = res_get.data["data"]["draft_answers"][str(self.question.id)]["answer_text"]
+        self.assertEqual(saved, "before-deadline.com")
+
+    def test_start_challenge_rejects_completed_event(self):
+        """The clock can never start on a non-LIVE event (no free 2:30 window
+        after the event has been closed)."""
+        self.event.status = Event.StatusChoices.COMPLETED
+        self.event.save()
+        self.client.credentials(HTTP_X_PARTICIPANT_TOKEN=self.token)
+        response = self.client.post(reverse("student-progress-start", kwargs={"challenge_slug": "phishnet"}))
+        # 401 because session-token auth itself requires a LIVE event;
+        # the server refuses both layers — auth and the clock start.
+        self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
+        self.participant.refresh_from_db()
+        self.assertIsNone(self.participant.started_at)

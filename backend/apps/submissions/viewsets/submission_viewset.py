@@ -70,10 +70,11 @@ class SubmissionViewSet(viewsets.ModelViewSet):
             if question:
                 # Enforce event-wide timer: the single event clock governs all
                 # challenges; there is no per-challenge time limit anymore.
-                event_remaining = participant.get_event_remaining_seconds()
-                if participant.started_at and event_remaining <= 0:
+                # Never-started clock → reject (window cannot be bypassed by
+                # skipping the Start click); expired clock → reject.
+                if not participant.started_at or participant.get_event_remaining_seconds() <= 0:
                     return Response(
-                        {"success": False, "message": "Event time has expired. Submission rejected."},
+                        {"success": False, "message": "Event time has expired or was never started. Submission rejected."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 # Unified grading (M-05): the single-question path uses the
