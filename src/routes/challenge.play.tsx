@@ -108,6 +108,9 @@ function PlayPage() {
   // rejects every write after expiry — this screen just mirrors that state so
   // students see WHY inputs are disabled instead of hitting server errors.
   const timeUp = eventSecondsLeft !== null && eventSecondsLeft <= 0;
+  // Final-5-minutes urgency: timer turns red (server still authoritative;
+  // this is purely visual pressure, not a gate).
+  const isTimerUrgent = eventSecondsLeft !== null && eventSecondsLeft > 0 && eventSecondsLeft <= 300;
   // Universal score — the participant's total score across the whole event,
   // identical on every challenge.
   const [totalScore, setTotalScore] = useState<number | null>(null);
@@ -384,6 +387,19 @@ function PlayPage() {
     [answers, challenge],
   );
 
+  // Auto-redirect to final results when the timer expires mid-challenge.
+  // The "Time's Up" overlay below stays visible for a few seconds so the
+  // transition doesn't feel abrupt, then we hand off to /competition-complete
+  // (reason=time_up), which shows score / rank / certificate status.
+  useEffect(() => {
+    if (!timeUp || completedChallenge) return;
+    const id = setTimeout(
+      () => navigate({ to: "/competition-complete", search: { reason: "time_up" } }),
+      4000,
+    );
+    return () => clearTimeout(id);
+  }, [timeUp, completedChallenge, navigate]);
+
   // Auto-redirect to arena when the backend denies cross-event access.
   useEffect(() => {
     if (!accessDenied) return;
@@ -430,33 +446,23 @@ function PlayPage() {
     );
   }
 
-  // Time's-up lock: the event window has expired. Server mirrors this by
-  // rejecting every write — this screen makes the state visible and final.
+  // Time's-up lock: the event window has expired. Brief transition overlay —
+  // auto-redirects to the final results page (see effect above). The server
+  // rejects every write from this point on.
   if (timeUp && !completedChallenge) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="max-w-md text-center">
-          <Clock className="mx-auto h-12 w-12 text-rose-400" />
+          <Clock className="mx-auto h-12 w-12 text-rose-400 animate-pulse" />
           <h2 className="mt-4 text-xl font-semibold">Time's Up — Event Window Closed</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             The 2:30:00 event timer has run out. Answering, saving and submitting are now locked
             across all challenges. Any answers already submitted before the deadline were graded
             and counted.
           </p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <button
-              onClick={() => navigate({ to: "/leaderboard" })}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-            >
-              <Trophy className="h-4 w-4" /> View Leaderboard
-            </button>
-            <button
-              onClick={() => navigate({ to: "/dashboard" })}
-              className="inline-flex items-center justify-center rounded-md border border-border bg-[var(--surface)] px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-            >
-              Back to Dashboard
-            </button>
-          </div>
+          <p className="mt-4 text-xs font-semibold text-primary animate-pulse">
+            Taking you to your final results…
+          </p>
         </div>
       </main>
     );
@@ -628,8 +634,8 @@ function PlayPage() {
           </div>
           <div className="flex items-center gap-2">
             <div className="hidden items-center gap-2 rounded-md border border-border bg-[var(--surface)] px-3 py-1.5 text-xs sm:flex">
-              <Clock className={`h-3.5 w-3.5 ${accent.text}`} />
-              <span className="font-mono font-semibold">{eventTimeLeft}</span>
+              <Clock className={`h-3.5 w-3.5 ${isTimerUrgent ? "text-rose-400 animate-pulse" : accent.text}`} />
+              <span className={`font-mono font-semibold ${isTimerUrgent ? "text-rose-400 animate-pulse" : ""}`}>{eventTimeLeft}</span>
             </div>
             <button
               onClick={end}
@@ -938,10 +944,12 @@ function PlayPage() {
         <aside className="space-y-4">
           <Panel title="Timer">
             <div className="flex items-center gap-2">
-              <Clock className={`h-4 w-4 ${accent.text}`} />
-              <span className="font-mono text-2xl font-bold">{eventTimeLeft}</span>
+              <Clock className={`h-4 w-4 ${isTimerUrgent ? "text-rose-400 animate-pulse" : accent.text}`} />
+              <span className={`font-mono text-2xl font-bold ${isTimerUrgent ? "text-rose-400 animate-pulse" : ""}`}>{eventTimeLeft}</span>
             </div>
-            <div className="mt-1 text-xs text-muted-foreground">Event time remaining — shared across all challenges</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {isTimerUrgent ? "Less than 5 minutes left — submit your work!" : "Event time remaining — shared across all challenges"}
+            </div>
           </Panel>
           <Panel title="Total Score">
             <div className="flex items-center gap-2">

@@ -15,6 +15,12 @@ import type { CertificateResponse, StudentDashboard } from "@/lib/api-types";
 
 export const Route = createFileRoute("/competition-complete")({
   component: CompetitionComplete,
+  validateSearch: (search: Record<string, unknown>): { reason?: "time_up" | "completed" } => ({
+    // Optional arrival reason: "time_up" when the event clock expired
+    // (auto-redirect from the challenge workspace), "completed" when the
+    // student finished every challenge. Absent = legacy/neutral copy.
+    reason: search.reason === "time_up" ? "time_up" : search.reason === "completed" ? "completed" : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Competition Complete — Blueteamers Arena" },
@@ -38,6 +44,7 @@ export const Route = createFileRoute("/competition-complete")({
 
 function CompetitionComplete() {
   const navigate = useNavigate();
+  const { reason } = Route.useSearch();
   const [data, setData] = useState<StudentDashboard | null>(null);
   const [certData, setCertData] = useState<CertificateResponse | null>(null);
 
@@ -79,10 +86,12 @@ function CompetitionComplete() {
             <CheckCircle2 className="h-10 w-10 text-emerald-400" />
           </div>
           <h1 className="mt-8 text-3xl font-extrabold tracking-tight">
-            Competition Complete
+            {reason === "time_up" ? "Time's Up — Event Concluded" : "Competition Complete"}
           </h1>
           <p className="mx-auto mt-3 max-w-md text-sm text-muted-foreground">
-            You have successfully completed all investigation challenges for {data?.event || "Blueteamers Arena"}.
+            {reason === "time_up"
+              ? `The ${data?.event || "event"} timer has run out and results are locked. Everything you submitted before the deadline has been graded and counted below.`
+              : `You have successfully completed all investigation challenges for ${data?.event || "Blueteamers Arena"}.`}
           </p>
         </div>
 
@@ -114,7 +123,9 @@ function CompetitionComplete() {
         <div className="mt-8 rounded-xl border border-border bg-card p-6 text-center space-y-3">
           <h2 className="text-lg font-semibold">Official Event Results</h2>
           <p className="text-sm text-muted-foreground">
-            Great job {data?.name || "Participant"}! Your performance has been verified and recorded.
+            {reason === "time_up"
+              ? `Time's up, ${data?.name || "Participant"}! Your final performance has been verified and recorded.`
+              : `Great job ${data?.name || "Participant"}! Your performance has been verified and recorded.`}
           </p>
 
           {certData && (
