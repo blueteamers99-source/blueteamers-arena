@@ -215,8 +215,12 @@ try:
     lb_data = LeaderboardService.get_event_leaderboard(event=event)
     rankings = lb_data["rankings"]
     assert len(rankings) >= 2, "Leaderboard should have at least 2 participants"
-    assert rankings[0]["participant_id"] == str(akhil.id), "Akhil should be #1 on leaderboard"
-    assert rankings[1]["participant_id"] == str(rahul.id), "Rahul should be #2 on leaderboard"
+    # Rows are PII-minimal: identify entries by NAME (participant_id/email are
+    # deliberately no longer part of the leaderboard payload).
+    assert rankings[0]["name"] == "Akhil Krishna", "Akhil should be #1 on leaderboard"
+    assert rankings[1]["name"] == "Rahul Sharma", "Rahul should be #2 on leaderboard"
+    assert "participant_id" not in rankings[0], "participant_id must not leak in leaderboard rows"
+    assert "email" not in rankings[0], "email must not leak in leaderboard rows"
     results["LEADERBOARD"] = "PASS"
     print(f"[CHECK 6] Database-driven leaderboard verified: #1 {rankings[0]['name']} ({rankings[0]['score']} pts), #2 {rankings[1]['name']} ({rankings[1]['score']} pts).")
 except Exception as e:

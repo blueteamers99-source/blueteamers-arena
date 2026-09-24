@@ -2,6 +2,7 @@ import jwt
 from django.conf import settings
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
+from apps.events.models.event import Event
 from apps.participants.services.session_service import SessionService
 from apps.participants.models.participant import Participant
 
@@ -85,6 +86,73 @@ class ParticipantTokenAuthentication(BaseAuthentication):
                 if participant:
                     # Reject if event is not Live — prevents access after event ends.
                     if participant.event and participant.event.status != "Live":
+                        raise AuthenticationFailed(
+                            "This event is no longer active."
+                        )
+                    request.participant = participant
+                    return (ParticipantUserWrapper(participant), token)
+        except AuthenticationFailed:
+            raise
+        except Exception:
+            pass
+
+        return None
+
+
+class LeaderboardTokenAuthentication(ParticipantTokenAuthentication):
+    """
+    Authentication for the leaderboard endpoints ONLY.
+
+    Identical to ParticipantTokenAuthentication except that tokens from
+    COMPLETED events remain valid — final standings must stay viewable after
+    the event clock runs out. Do NOT attach this class to any other viewset:
+    challenge/progress/certificate access must die with the event.
+    """
+
+    _LEADERBOARD_STATUSES = [Event.StatusChoices.LIVE, Event.StatusChoices.COMPLETED]
+
+    def authenticate(self, request):
+        auth_header = request.headers.get("Authorization", "")
+        token = request.headers.get("X-Participant-Token")
+
+        if not token and auth_header:
+            if auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+            elif auth_header.startswith("Participant "):
+                token = auth_header.split(" ")[1]
+
+        if not token:
+            return None
+
+        # 1. TimestampSigner session token — relaxed event-status policy.
+        try:
+            participant = SessionService.verify_participant_token(
+                token, allowed_statuses=self._LEADERBOARD_STATUSES
+            )
+            request.participant = participant
+            return (ParticipantUserWrapper(participant), token)
+        except Exception:
+            pass
+
+        # 2. JWT token (access tokens only) — same relaxed policy.
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            if payload.get("token_type") == "refresh":
+                raise AuthenticationFailed(
+                    "Refresh tokens cannot be used for API access."
+                )
+            p_id = payload.get("participant_id")
+            if p_id:
+                participant = (
+                    Participant.objects.select_related("event")
+                    .filter(id=p_id)
+                    .first()
+                )
+                if participant:
+                    if (
+                        participant.event
+                        and participant.event.status not in self._LEADERBOARD_STATUSES
+                    ):
                         raise AuthenticationFailed(
                             "This event is no longer active."
                         )
