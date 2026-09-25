@@ -30,3 +30,12 @@ else:
 
 # Email Backend (Console for Development)
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+
+# Channel layer (WebSockets): in-memory layer so local dev and the test suite
+# never require Redis. Production overrides this in settings/production.py
+# with channels_redis when REDIS_URL is set.
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}

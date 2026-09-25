@@ -32,7 +32,8 @@ services:
   blueteamers_api:
     build: .
     container_name: blueteamers_api
-    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2
+    # ASGI (UvicornWorker) — serves HTTP + WebSockets from one process
+    command: gunicorn config.asgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2 -k uvicorn.workers.UvicornWorker
     ports:
       - "8000:8000"
     environment:
