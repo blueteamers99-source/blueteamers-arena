@@ -1,8 +1,21 @@
 import jwt
 from typing import Tuple, Optional
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from apps.accounts.models.user import User
 from apps.participants.models.participant import Participant
+
+
+async def aresolve_ws_auth(scope: dict) -> Tuple[Optional[User], Optional[Participant]]:
+    """Async variant of resolve_ws_auth for consumers (connect() runs in the
+    event loop, where the ORM lookups in _decode_token would otherwise raise
+    SynchronousOnlyOperation and be silently swallowed by its broad except)."""
+    return await sync_to_async(resolve_ws_auth, thread_sensitive=True)(scope)
+
+
+async def aresolve_token_from_message(data: dict) -> Tuple[Optional[User], Optional[Participant]]:
+    """Async variant of resolve_token_from_message for consumers' receive()."""
+    return await sync_to_async(resolve_token_from_message, thread_sensitive=True)(data)
 
 
 def resolve_ws_auth(scope: dict) -> Tuple[Optional[User], Optional[Participant]]:

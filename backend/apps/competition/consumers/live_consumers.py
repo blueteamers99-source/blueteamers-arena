@@ -1,7 +1,7 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from apps.competition.utils.ws_auth import resolve_ws_auth, resolve_token_from_message
+from apps.competition.utils.ws_auth import aresolve_ws_auth, aresolve_token_from_message
 from apps.events.models.event import Event
 
 
@@ -34,7 +34,7 @@ class LeaderboardConsumer(AsyncWebsocketConsumer):
         self._authenticated = False
 
         # Try header-based auth (e.g., server-to-server)
-        user, participant = resolve_ws_auth(self.scope)
+        user, participant = await aresolve_ws_auth(self.scope)
         if user or participant:
             if await self._verify_event_access(user, participant, self.event_code):
                 self._authenticated = True
@@ -62,7 +62,7 @@ class LeaderboardConsumer(AsyncWebsocketConsumer):
         data = json.loads(text_data)
 
         if not self._authenticated:
-            user, participant = resolve_token_from_message(data)
+            user, participant = await aresolve_token_from_message(data)
             if not await self._verify_event_access(user, participant, self.event_code):
                 await self.send(text_data=json.dumps({
                     "type": "error",
@@ -96,7 +96,7 @@ class DashboardConsumer(AsyncWebsocketConsumer):
         self._authenticated = False
 
         # Try header-based auth
-        user, _ = resolve_ws_auth(self.scope)
+        user, _ = await aresolve_ws_auth(self.scope)
         if user and await self._is_admin_user(user):
             self._authenticated = True
 
@@ -122,7 +122,7 @@ class DashboardConsumer(AsyncWebsocketConsumer):
         data = json.loads(text_data)
 
         if not self._authenticated:
-            user, _ = resolve_token_from_message(data)
+            user, _ = await aresolve_token_from_message(data)
             if not await self._is_admin_user(user):
                 await self.send(text_data=json.dumps({
                     "type": "error",
@@ -157,7 +157,7 @@ class NotificationsConsumer(AsyncWebsocketConsumer):
         self._participant = None
 
         # Try header-based auth
-        user, participant = resolve_ws_auth(self.scope)
+        user, participant = await aresolve_ws_auth(self.scope)
         if user or participant:
             self._authenticated = True
             self._user = user
@@ -195,7 +195,7 @@ class NotificationsConsumer(AsyncWebsocketConsumer):
         data = json.loads(text_data)
 
         if not self._authenticated:
-            user, participant = resolve_token_from_message(data)
+            user, participant = await aresolve_token_from_message(data)
             if not user and not participant:
                 await self.send(text_data=json.dumps({
                     "type": "error",

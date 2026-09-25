@@ -1,7 +1,7 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from apps.competition.utils.ws_auth import resolve_ws_auth, resolve_token_from_message
+from apps.competition.utils.ws_auth import aresolve_ws_auth, aresolve_token_from_message
 from apps.events.models.event import Event
 
 
@@ -38,7 +38,7 @@ class ArenaConsumer(AsyncWebsocketConsumer):
         self._participant = None
 
         # Try header-based auth (e.g., server-to-server)
-        user, participant = resolve_ws_auth(self.scope)
+        user, participant = await aresolve_ws_auth(self.scope)
         if user or participant:
             is_authorized, err_msg = await self._verify_event_access(user, participant, self.event_code)
             if not is_authorized:
@@ -71,7 +71,7 @@ class ArenaConsumer(AsyncWebsocketConsumer):
 
         # Handle first-message authentication
         if not self._authenticated:
-            user, participant = resolve_token_from_message(data)
+            user, participant = await aresolve_token_from_message(data)
             is_authorized, err_msg = await self._verify_event_access(user, participant, self.event_code)
             if not is_authorized:
                 await self.send(text_data=json.dumps({

@@ -1,4 +1,5 @@
-web: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 4
-websocket: daphne -b 0.0.0.0 -p $PORT config.asgi:application
+# web serves HTTP + WebSockets via ASGI (UvicornWorker). One process — a
+# separate `websocket:` daphne line would collide on the same $PORT.
+web: gunicorn config.asgi:application --bind 0.0.0.0:$PORT --workers 4 -k uvicorn.workers.UvicornWorker
 worker: celery -A config worker --loglevel=info
 beat: celery -A config beat --loglevel=info

@@ -116,6 +116,16 @@ class SubmissionService:
                 "score_earned": grading_result["score_earned"],
                 "total_score": participant.score,
             })
+            # Live leaderboard push: clients subscribed to the event's WS group
+            # get the fresh board within milliseconds instead of waiting for
+            # the per-minute Celery Beat refresh. The payload is built WITHOUT
+            # student_participant (it is event-wide, so is_current_user stays
+            # false on every row — clients overlay their own row).
+            from apps.leaderboard.services.leaderboard_service import LeaderboardService
+            WebSocketService.notify_leaderboard_update(
+                event_code,
+                LeaderboardService.get_event_leaderboard(event=participant.event),
+            )
         except Exception:
             pass
 

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Trophy,
   Users,
@@ -29,6 +29,7 @@ import { API_BASE_URL } from "@/lib/config";
 import { studentAuthFetch } from "@/lib/auth";
 import { extractLeaderboardPayload } from "@/lib/api-types";
 import type { LeaderboardEntry, LeaderboardPayload } from "@/lib/api-types";
+import { useLeaderboardSocket } from "@/lib/useLeaderboardSocket";
 import { formatClock } from "@/lib/useEventCountdown";
 
 export const Route = createFileRoute("/leaderboard")({
@@ -59,6 +60,10 @@ function ArenaCommandCenter() {
   const [lastSyncAt, setLastSyncAt] = useState<number>(Date.now());
   const [nowTick, setNowTick] = useState<number>(Date.now());
 
+  // Event code for the WebSocket subscription (kept in state because the
+  // effect that reads sessionStorage runs once).
+  const [eventCode, setEventCode] = useState<string | null>(null);
+
   useEffect(() => {
     const t = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(t);
@@ -66,21 +71,35 @@ function ArenaCommandCenter() {
   const displayRemaining =
     serverRemaining === null ? null : Math.max(0, serverRemaining - Math.floor((nowTick - lastSyncAt) / 1000));
 
+  // Single ingest path shared by REST polling AND WebSocket pushes, so both
+  // channels always render through the same PII-minimal payload contract.
+  const applyPayload = useCallback((resData: unknown) => {
+    const payload = extractLeaderboardPayload(resData);
+    if (payload.rankings.length === 0 && !payload.is_final) return;
+    // WS payloads are built without the requesting student's context, so
+    // is_current_user arrives false for every row. Overlay the student's
+    // own row (rank learned from the REST poll) onto the fresh WS data.
+    const prevSelf = leaderboard?.student_position ?? leaderboard?.rankings.find((r) => r.is_current_user) ?? null;
+    const withSelf: LeaderboardPayload = {
+      ...payload,
+      rankings: prevSelf
+        ? payload.rankings.map((r) => (r.rank === prevSelf.rank ? { ...r, is_current_user: true } : r))
+        : payload.rankings,
+      student_position: payload.student_position ?? prevSelf,
+    };
+    setLeaderboard(withSelf);
+    setLeaderboardItems(withSelf.rankings);
+    if (typeof payload.time_remaining === "number") {
+      setServerRemaining(payload.time_remaining);
+      setLastSyncAt(Date.now());
+    }
+  }, [leaderboard]);
+
   const fetchLeaderboardData = () => {
     setIsRefreshing(true);
     // The backend derives the event from the auth token; no event_code param
     // is sent (it is ignored server-side and must never widen visibility).
     const url = `${API_BASE_URL}/leaderboard/current/`;
-
-    const applyPayload = (resData: unknown) => {
-      const payload = extractLeaderboardPayload(resData);
-      setLeaderboard(payload);
-      setLeaderboardItems(payload.rankings);
-      if (typeof payload.time_remaining === "number") {
-        setServerRemaining(payload.time_remaining);
-        setLastSyncAt(Date.now());
-      }
-    };
 
     studentAuthFetch(url)
       .then((res) => {
@@ -88,10 +107,7 @@ function ArenaCommandCenter() {
         return res.json();
       })
       .then((resData) => {
-        const payload = extractLeaderboardPayload(resData);
-        if (payload.rankings.length > 0) {
-          applyPayload(resData);
-        }
+        applyPayload(resData);
       })
       .catch((err) => {
         console.error("Error fetching command center data:", err);
@@ -101,15 +117,23 @@ function ArenaCommandCenter() {
   };
 
   useEffect(() => {
-    const eventCode = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("arena.selectedEventCode") : null;
-    if (!eventCode) {
+    const stored = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("arena.selectedEventCode") : null;
+    if (!stored) {
       navigate({ to: "/arena" });
       return;
     }
+    setEventCode(stored);
     fetchLeaderboardData();
-    const interval = setInterval(fetchLeaderboardData, 4000); // 4-second live poll
+    const interval = setInterval(fetchLeaderboardData, 4000); // 4-second fallback poll
     return () => clearInterval(interval);
   }, []);
+
+  // Live WebSocket subscription: instant pushes, polling stays as the
+  // safety net (reconnect gap, token refresh, is_current_user overlay).
+  const wsStatus = useLeaderboardSocket({
+    eventCode,
+    onLeaderboard: applyPayload,
+  });
 
   // Calculate PostgreSQL Command Center Top Statistics (from real data only)
   const totalParticipants = leaderboardItems.length;
@@ -120,6 +144,7 @@ function ArenaCommandCenter() {
   const certificatesGenerated = leaderboardItems.filter((i) => i.score >= 600).length;
   const liveChallengesRunning = leaderboardItems.filter((i) => !i.is_finished && i.score > 0).length;
   const isFinal = Boolean(leaderboard?.is_final);
+  const isSocketLive = wsStatus === "open";
   const winner = leaderboard?.winner ?? (isFinal && leaderboardItems[0] ? leaderboardItems[0] : null);
   const finalReason = leaderboard?.final_reason ?? null;
   const eventStatus = leaderboard?.event_status ?? "Live";
@@ -189,7 +214,13 @@ function ArenaCommandCenter() {
                 {isFinal ? "🏁 FINAL RESULTS" : "⚡ REAL-TIME COMMAND CENTER"}
               </span>
               <span className="text-xs text-muted-foreground font-mono">
-                {isFinal ? "STANDINGS LOCKED" : eventStatus === "Live" ? "LIVE — UPDATES EVERY 4s" : "POSTGRESQL LIVE AGGREGATION"}
+                {isFinal
+                  ? "STANDINGS LOCKED"
+                  : isSocketLive
+                    ? "LIVE — INSTANT UPDATES"
+                    : eventStatus === "Live"
+                      ? "LIVE — UPDATES EVERY 4s"
+                      : "POSTGRESQL LIVE AGGREGATION"}
               </span>
             </div>
             <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-3">

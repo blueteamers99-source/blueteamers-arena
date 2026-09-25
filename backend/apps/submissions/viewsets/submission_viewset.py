@@ -166,6 +166,20 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         # Refresh participant from DB to get accurate post-save values
         participant.refresh_from_db()
 
+        # Live leaderboard push (best-effort): the single-question path bypasses
+        # SubmissionService, so without this the board only refreshes on the
+        # per-minute Celery Beat tick. Event-wide payload with no student
+        # context — clients overlay their own is_current_user row.
+        try:
+            from apps.leaderboard.services.leaderboard_service import LeaderboardService
+            from apps.competition.services.websocket_service import WebSocketService
+            WebSocketService.notify_leaderboard_update(
+                participant.event.event_code,
+                LeaderboardService.get_event_leaderboard(event=participant.event),
+            )
+        except Exception:
+            pass
+
         # Calculate updated rank
         higher_score_count = Participant.objects.filter(
             event=participant.event,
