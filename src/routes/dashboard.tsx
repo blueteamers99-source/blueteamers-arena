@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Target,
@@ -31,11 +31,13 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { API_BASE_URL } from "@/lib/config";
 import { studentAuthFetch, verifyAnyStudentSession, clearStudentAuth } from "@/lib/auth";
 import { useEventCountdown } from "@/lib/useEventCountdown";
+import { useLeaderboardSocket } from "@/lib/useLeaderboardSocket";
 import { asString, extractRankings, extractResults, isRecord } from "@/lib/api-types";
 import type {
   CertificateResponse,
   ChallengeListItem,
   LeaderboardEntry,
+  LeaderboardPayload,
   StudentDashboard,
 } from "@/lib/api-types";
 import {
@@ -200,6 +202,27 @@ function Dashboard() {
   const [leaderboardSearch, setLeaderboardSearch] = useState("");
   const [leaderboardFilter, setLeaderboardFilter] = useState<LeaderboardFilter>("All");
 
+  // Event code for the live WebSocket subscription (the effect that reads
+  // sessionStorage runs once, so the code is kept in state).
+  const [eventCode, setEventCode] = useState<string | null>(null);
+
+  // Single ingest path shared by the initial load, the polling fallback AND
+  // WebSocket pushes, so every channel renders the same server-ranked board.
+  const fetchLeaderboard = useCallback(() => {
+    studentAuthFetch(`${API_BASE_URL}/leaderboard/`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch leaderboard");
+        return res.json();
+      })
+      .then((resData: unknown) => {
+        const list = extractRankings<LeaderboardEntry>(resData);
+        if (list.length > 0) {
+          setLeaderboardItems(list);
+        }
+      })
+      .catch((err) => console.error("Error fetching leaderboard:", err));
+  }, []);
+
   useEffect(() => {
     // Layer 2 gate: do not fire authenticated data fetches until the server
     // has verified the session — avoids 401 spam and redirect races for
@@ -214,6 +237,7 @@ function Dashboard() {
     }
 
     setEv(getSelectedEvent());
+    setEventCode(eventCode);
     const userEmail = typeof localStorage !== "undefined" ? localStorage.getItem("user_email") : null;
 
     const meUrl = userEmail ? `${API_BASE_URL}/dashboard/me/?email=${encodeURIComponent(userEmail)}` : `${API_BASE_URL}/dashboard/me/`;
@@ -238,19 +262,31 @@ function Dashboard() {
       })
       .catch(() => {});
 
-    studentAuthFetch(`${API_BASE_URL}/leaderboard/`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch leaderboard");
-        return res.json();
-      })
-      .then((resData: unknown) => {
-        const list = extractRankings<LeaderboardEntry>(resData);
-        if (list.length > 0) {
-          setLeaderboardItems(list);
-        }
-      })
-      .catch((err) => console.error("Error fetching leaderboard:", err));
-  }, [authChecked]);
+    fetchLeaderboard();
+  }, [authChecked, fetchLeaderboard]);
+
+  // Live WebSocket subscription: instant pushes on every accepted submission.
+  // The broadcast is event-wide (no per-viewer "is_current_user" flag), and
+  // this tab renders no self-highlight, so no student overlay is needed.
+  const applyLeaderboard = useCallback((payload: LeaderboardPayload) => {
+    if (payload.rankings.length > 0) {
+      setLeaderboardItems(payload.rankings);
+    }
+  }, []);
+
+  useLeaderboardSocket({
+    eventCode,
+    onLeaderboard: applyLeaderboard,
+  });
+
+  // Polling fallback: refresh the REST board every 4s so the tab stays fresh
+  // even when the WebSocket push chain is unavailable (e.g. Redis not wired
+  // up in production). Mirrors the Command Center page's fallback poll.
+  useEffect(() => {
+    if (!authChecked) return;
+    const interval = setInterval(fetchLeaderboard, 4000);
+    return () => clearInterval(interval);
+  }, [authChecked, fetchLeaderboard]);
 
   // Layer 2 — route guard: prove the session server-side before rendering.
   // /dashboard is reachable through both login flows (user tokens via the
