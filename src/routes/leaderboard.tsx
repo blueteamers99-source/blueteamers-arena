@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Trophy,
   Users,
@@ -64,22 +64,42 @@ function ArenaCommandCenter() {
   // effect that reads sessionStorage runs once).
   const [eventCode, setEventCode] = useState<string | null>(null);
 
+  // Pause live updates while the tab is hidden (fix 5).
+  const [isPageHidden, setIsPageHidden] = useState(false);
+
   useEffect(() => {
     const t = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    const onVis = () => setIsPageHidden(document.hidden);
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
   const displayRemaining =
     serverRemaining === null ? null : Math.max(0, serverRemaining - Math.floor((nowTick - lastSyncAt) / 1000));
+
+  // Mirrors that survive re-renders: the latest payload (so callbacks never
+  // read a stale closure) and the in-flight controller (so a slower request
+  // can be cancelled instead of overwriting fresher data).
+  const leaderboardRef = useRef<LeaderboardPayload | null>(null);
+  const leaderboardAbortRef = useRef<AbortController | null>(null);
+  const failuresRef = useRef(0);
 
   // Single ingest path shared by REST polling AND WebSocket pushes, so both
   // channels always render through the same PII-minimal payload contract.
   const applyPayload = useCallback((resData: unknown) => {
+    // Any still-in-flight REST poll is superseded by this payload — abort it
+    // so a stale response can never overwrite fresher WebSocket data.
+    leaderboardAbortRef.current?.abort();
     const payload = extractLeaderboardPayload(resData);
     if (payload.rankings.length === 0 && !payload.is_final) return;
     // WS payloads are built without the requesting student's context, so
     // is_current_user arrives false for every row. Overlay the student's
     // own row (rank learned from the REST poll) onto the fresh WS data.
-    const prevSelf = leaderboard?.student_position ?? leaderboard?.rankings.find((r) => r.is_current_user) ?? null;
+    const prev = leaderboardRef.current;
+    const prevSelf = prev?.student_position ?? prev?.rankings.find((r) => r.is_current_user) ?? null;
     const withSelf: LeaderboardPayload = {
       ...payload,
       rankings: prevSelf
@@ -87,34 +107,59 @@ function ArenaCommandCenter() {
         : payload.rankings,
       student_position: payload.student_position ?? prevSelf,
     };
+    leaderboardRef.current = withSelf;
     setLeaderboard(withSelf);
     setLeaderboardItems(withSelf.rankings);
     if (typeof payload.time_remaining === "number") {
       setServerRemaining(payload.time_remaining);
       setLastSyncAt(Date.now());
     }
-  }, [leaderboard]);
+  }, []);
 
-  const fetchLeaderboardData = () => {
+  // Live WebSocket subscription: instant pushes, polling stays as the safety
+  // net (reconnect gap, token refresh, is_current_user overlay).
+  const wsStatus = useLeaderboardSocket({
+    eventCode: isPageHidden ? null : eventCode,
+    onLeaderboard: applyPayload,
+  });
+
+  const fetchLeaderboardData = useCallback(() => {
+    // Abort any still-in-flight request so only the newest poll can land.
+    leaderboardAbortRef.current?.abort();
+    const controller = new AbortController();
+    leaderboardAbortRef.current = controller;
+
     setIsRefreshing(true);
     // The backend derives the event from the auth token; no event_code param
     // is sent (it is ignored server-side and must never widen visibility).
     const url = `${API_BASE_URL}/leaderboard/current/`;
 
-    studentAuthFetch(url)
+    studentAuthFetch(url, { signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error("Leaderboard request failed");
         return res.json();
       })
       .then((resData) => {
+        failuresRef.current = 0;
+        setFetchError(null);
         applyPayload(resData);
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
+        // Superseded by a newer push/poll — not a real failure.
+        if ((err as { name?: string })?.name === "AbortError") return;
+        failuresRef.current += 1;
         console.error("Error fetching command center data:", err);
         setFetchError("Unable to load leaderboard data. Please try again.");
       })
-      .finally(() => setIsRefreshing(false));
-  };
+      .finally(() => {
+        if (leaderboardAbortRef.current === controller) {
+          leaderboardAbortRef.current = null;
+          setIsRefreshing(false);
+        }
+      });
+  }, [applyPayload]);
+
+  const isFinal = Boolean(leaderboard?.is_final);
 
   useEffect(() => {
     const stored = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("arena.selectedEventCode") : null;
@@ -123,17 +168,25 @@ function ArenaCommandCenter() {
       return;
     }
     setEventCode(stored);
+    // While the socket is live the board is pushed to us, so only fetch
+    // immediately when it's down — no duplicated fresh data. Slow reconcile
+    // poll while open; fast fallback with backoff on repeated failures (fix 6)
+    // while it reconnects. Paused while hidden or once the event is final.
+    if (isPageHidden || isFinal) return;
     fetchLeaderboardData();
-    const interval = setInterval(fetchLeaderboardData, 4000); // 4-second fallback poll
-    return () => clearInterval(interval);
-  }, []);
-
-  // Live WebSocket subscription: instant pushes, polling stays as the
-  // safety net (reconnect gap, token refresh, is_current_user overlay).
-  const wsStatus = useLeaderboardSocket({
-    eventCode,
-    onLeaderboard: applyPayload,
-  });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (isPageHidden || leaderboardRef.current?.is_final) return;
+      const backoff = [4000, 8000, 16000, 30000][Math.min(failuresRef.current, 3)];
+      const delay = wsStatus === "open" ? 20000 : backoff;
+      timer = setTimeout(() => {
+        fetchLeaderboardData();
+        schedule();
+      }, delay);
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, [wsStatus, navigate, fetchLeaderboardData, isPageHidden, isFinal]);
 
   // Calculate PostgreSQL Command Center Top Statistics (from real data only)
   const totalParticipants = leaderboardItems.length;
@@ -143,7 +196,6 @@ function ArenaCommandCenter() {
   const avgScore = totalParticipants > 0 ? Math.round(leaderboardItems.reduce((acc, i) => acc + i.score, 0) / totalParticipants) : 0;
   const certificatesGenerated = leaderboardItems.filter((i) => i.score >= 600).length;
   const liveChallengesRunning = leaderboardItems.filter((i) => !i.is_finished && i.score > 0).length;
-  const isFinal = Boolean(leaderboard?.is_final);
   const isSocketLive = wsStatus === "open";
   const winner = leaderboard?.winner ?? (isFinal && leaderboardItems[0] ? leaderboardItems[0] : null);
   const finalReason = leaderboard?.final_reason ?? null;
