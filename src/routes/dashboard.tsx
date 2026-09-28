@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard,
   Target,
@@ -32,7 +32,7 @@ import { API_BASE_URL } from "@/lib/config";
 import { studentAuthFetch, verifyAnyStudentSession, clearStudentAuth } from "@/lib/auth";
 import { useEventCountdown } from "@/lib/useEventCountdown";
 import { useLeaderboardSocket } from "@/lib/useLeaderboardSocket";
-import { asString, extractRankings, extractResults, isRecord } from "@/lib/api-types";
+import { asString, extractLeaderboardPayload, extractResults, isRecord } from "@/lib/api-types";
 import type {
   CertificateResponse,
   ChallengeListItem,
@@ -206,22 +206,75 @@ function Dashboard() {
   // sessionStorage runs once, so the code is kept in state).
   const [eventCode, setEventCode] = useState<string | null>(null);
 
-  // Single ingest path shared by the initial load, the polling fallback AND
-  // WebSocket pushes, so every channel renders the same server-ranked board.
+  // Abort ref so a slow REST poll can never overwrite fresher WebSocket data.
+  const leaderboardAbortRef = useRef<AbortController | null>(null);
+  // Latest payload mirror (survives re-renders) so callbacks never read a
+  // stale closure when overlaying the student's own row onto WS pushes.
+  const leaderboardRef = useRef<LeaderboardPayload | null>(null);
+  // Consecutive fetch failures, used to back the poll off (fix 6).
+  const failuresRef = useRef(0);
+  // Latest full payload (reactive), for the official podium / final winners.
+  const [leaderboardMeta, setLeaderboardMeta] = useState<LeaderboardPayload | null>(null);
+
+  // Pause live updates while the tab is hidden (fix 5): no point polling or
+  // holding a WebSocket open for a page nobody can see.
+  const [isPageHidden, setIsPageHidden] = useState(false);
+  useEffect(() => {
+    const onVis = () => setIsPageHidden(document.hidden);
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
+  // Single ingest path shared by REST polling AND WebSocket pushes: both
+  // channels render through the same full leaderboard payload, so the board is
+  // always server-ranked and the student's own row stays highlighted.
+  const applyLeaderboard = useCallback((payload: LeaderboardPayload) => {
+    // Any still-in-flight REST poll is superseded by this payload — abort it
+    // so a stale response can never overwrite fresher WebSocket data.
+    leaderboardAbortRef.current?.abort();
+    if (payload.rankings.length === 0 && !payload.is_final) return;
+    // WS payloads lack student context; overlay the own row (rank learned
+    // from the last REST payload) so is_current_user stays true on pushes.
+    const prev = leaderboardRef.current;
+    const prevSelf = prev?.student_position ?? prev?.rankings.find((r) => r.is_current_user) ?? null;
+    const withSelf: LeaderboardPayload = {
+      ...payload,
+      rankings: prevSelf
+        ? payload.rankings.map((r) => (r.rank === prevSelf.rank ? { ...r, is_current_user: true } : r))
+        : payload.rankings,
+      student_position: payload.student_position ?? prevSelf,
+    };
+    leaderboardRef.current = withSelf;
+    setLeaderboardItems(withSelf.rankings);
+    setLeaderboardMeta(withSelf);
+  }, []);
+
   const fetchLeaderboard = useCallback(() => {
-    studentAuthFetch(`${API_BASE_URL}/leaderboard/`)
+    // Abort any still-in-flight request so only the newest fetch can land.
+    leaderboardAbortRef.current?.abort();
+    const controller = new AbortController();
+    leaderboardAbortRef.current = controller;
+    studentAuthFetch(`${API_BASE_URL}/leaderboard/current/`, { signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error("Failed to fetch leaderboard");
         return res.json();
       })
       .then((resData: unknown) => {
-        const list = extractRankings<LeaderboardEntry>(resData);
-        if (list.length > 0) {
-          setLeaderboardItems(list);
-        }
+        failuresRef.current = 0;
+        applyLeaderboard(extractLeaderboardPayload(resData));
       })
-      .catch((err) => console.error("Error fetching leaderboard:", err));
-  }, []);
+      .catch((err: unknown) => {
+        // Superseded by a newer push/poll — not a real failure.
+        if ((err as { name?: string })?.name === "AbortError") return;
+        failuresRef.current += 1;
+        console.error("Error fetching leaderboard:", err);
+      })
+      .finally(() => {
+        if (leaderboardAbortRef.current === controller) {
+          leaderboardAbortRef.current = null;
+        }
+      });
+  }, [applyLeaderboard]);
 
   useEffect(() => {
     // Layer 2 gate: do not fire authenticated data fetches until the server
@@ -261,32 +314,37 @@ function Dashboard() {
         }
       })
       .catch(() => {});
-
-    fetchLeaderboard();
-  }, [authChecked, fetchLeaderboard]);
+  }, [authChecked]);
 
   // Live WebSocket subscription: instant pushes on every accepted submission.
-  // The broadcast is event-wide (no per-viewer "is_current_user" flag), and
-  // this tab renders no self-highlight, so no student overlay is needed.
-  const applyLeaderboard = useCallback((payload: LeaderboardPayload) => {
-    if (payload.rankings.length > 0) {
-      setLeaderboardItems(payload.rankings);
-    }
-  }, []);
-
-  useLeaderboardSocket({
-    eventCode,
+  // Only active while the leaderboard tab is visible and the page isn't hidden
+  // (fix 5) — otherwise the socket closes and reconnects when it's needed.
+  const wsStatus = useLeaderboardSocket({
+    eventCode: !isPageHidden && activeTab === "Leaderboard" ? eventCode : null,
     onLeaderboard: applyLeaderboard,
   });
 
-  // Polling fallback: refresh the REST board every 4s so the tab stays fresh
-  // even when the WebSocket push chain is unavailable (e.g. Redis not wired
-  // up in production). Mirrors the Command Center page's fallback poll.
+  // Polling fallback: a slow 20s reconcile while the WebSocket is live; when
+  // it drops we poll immediately and fall back to every 4s, with exponential
+  // backoff up to 30s on consecutive failures (fix 6). Stops entirely once
+  // the event is final, while the tab is hidden, or off the leaderboard tab.
   useEffect(() => {
-    if (!authChecked) return;
-    const interval = setInterval(fetchLeaderboard, 4000);
-    return () => clearInterval(interval);
-  }, [authChecked, fetchLeaderboard]);
+    if (!authChecked || isPageHidden || activeTab !== "Leaderboard") return;
+    if (leaderboardRef.current?.is_final) return;
+    fetchLeaderboard();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (leaderboardRef.current?.is_final) return;
+      const backoff = [4000, 8000, 16000, 30000][Math.min(failuresRef.current, 3)];
+      const delay = wsStatus === "open" ? 20000 : backoff;
+      timer = setTimeout(() => {
+        fetchLeaderboard();
+        schedule();
+      }, delay);
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, [authChecked, isPageHidden, activeTab, wsStatus, fetchLeaderboard]);
 
   // Layer 2 — route guard: prove the session server-side before rendering.
   // /dashboard is reachable through both login flows (user tokens via the
@@ -334,6 +392,7 @@ function Dashboard() {
       score: p.score,
       time: p.time_taken,
       status: p.completed > 0 ? "Completed" : "Running",
+      isSelf: p.is_current_user,
     })).filter((row) => {
       const matchesSearch = row.student.toLowerCase().includes(leaderboardSearch.toLowerCase());
       const matchesFilter = leaderboardFilter === "All" || row.status === leaderboardFilter;
@@ -361,18 +420,32 @@ function Dashboard() {
     { label: "Challenges", value: `${done} / ${total}`, icon: Target, sub: "Completed" },
   ];
 
-  // Build podium from real leaderboard data (top 3 by score)
+  // Podium from the server's official standings: live `top3_podium`, and the
+  // announced `winners` once the event is final. Falls back to the ranked list
+  // when the backend omits the podium block. Uses the server's rank order
+  // (score DESC, time ASC) rather than a local re-sort, so ties match the
+  // official top-3 exactly.
   const sortedPodium = useMemo(() => {
-    const top3 = [...leaderboardItems]
-      .sort((a, b) => b.score - a.score)
+    const isFinal = Boolean(leaderboardMeta?.is_final);
+    const raw = isFinal
+      ? leaderboardMeta?.winners?.length
+        ? leaderboardMeta.winners
+        : leaderboardItems.slice(0, 3)
+      : leaderboardMeta?.top3_podium?.length
+        ? leaderboardMeta.top3_podium
+        : leaderboardItems.slice(0, 3);
+
+    const colors: Record<number, { medal: string; color: string; border: string; bg: string }> = {
+      1: { medal: "🥇", color: "#F59E0B", border: "border-amber-500/60", bg: "from-amber-500/10 via-card to-card" },
+      2: { medal: "🥈", color: "#9CA3AF", border: "border-slate-400/40", bg: "from-slate-400/10 via-card to-card" },
+      3: { medal: "🥉", color: "#B45309", border: "border-amber-700/40", bg: "from-amber-700/10 via-card to-card" },
+    };
+
+    const top3 = [...raw]
+      .sort((a, b) => a.rank - b.rank)
       .slice(0, 3)
       .map((item, idx) => {
-        const rank = idx + 1;
-        const colors: Record<number, { medal: string; color: string; border: string; bg: string }> = {
-          1: { medal: "🥇", color: "#F59E0B", border: "border-amber-500/60", bg: "from-amber-500/10 via-card to-card" },
-          2: { medal: "🥈", color: "#9CA3AF", border: "border-slate-400/40", bg: "from-slate-400/10 via-card to-card" },
-          3: { medal: "🥉", color: "#B45309", border: "border-amber-700/40", bg: "from-amber-700/10 via-card to-card" },
-        };
+        const rank = item.rank > 0 ? item.rank : idx + 1;
         return {
           rank,
           ...colors[rank],
@@ -384,7 +457,7 @@ function Dashboard() {
     // Reorder for display: [2nd, 1st, 3rd]
     if (top3.length === 3) return [top3[1], top3[0], top3[2]];
     return top3;
-  }, [leaderboardItems]);
+  }, [leaderboardMeta, leaderboardItems]);
 
   // Gate: never render the dashboard shell until the server has verified the
   // session (or bounced the visitor). Prevents demo fallbacks from rendering
@@ -748,7 +821,7 @@ function Dashboard() {
                   {filteredLeaderboardRows.map((row) => (
                     <tr
                       key={row.rank}
-                      className="transition-colors hover:bg-accent/40"
+                      className={`transition-colors ${row.isSelf ? "bg-primary/10 border-l-2 border-primary" : "hover:bg-accent/40"}`}
                     >
                       <td className="px-5 py-4">
                         <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 bg-[var(--surface)] text-xs font-bold text-muted-foreground">
