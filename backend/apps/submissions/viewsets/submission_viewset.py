@@ -68,6 +68,26 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         if question_id and answer_input:
             question = Question.objects.filter(id=question_id).first()
             if question:
+                # Cross-event isolation (same policy as the challenge path in
+                # SubmissionService): the question must be attached to a
+                # challenge the participant's event can see — their event's
+                # challenges, falling back to the event-less global set.
+                # Question rows are shared across events via ChallengeQuestion,
+                # so without this a participant could farm points from another
+                # event's question bank.
+                if participant.event_id:
+                    allowed_challenges = Challenge.objects.filter(event_id=participant.event_id)
+                    if not allowed_challenges.exists():
+                        allowed_challenges = Challenge.objects.filter(event__isnull=True)
+                else:
+                    allowed_challenges = Challenge.objects.filter(event__isnull=True)
+                if not ChallengeQuestion.objects.filter(
+                    question=question, challenge__in=allowed_challenges
+                ).exists():
+                    return Response(
+                        {"success": False, "message": "Forbidden. Question does not belong to your event."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
                 # Enforce event-wide timer: the single event clock governs all
                 # challenges; there is no per-challenge time limit anymore.
                 # Never-started clock → reject (window cannot be bypassed by
@@ -118,9 +138,11 @@ class SubmissionViewSet(viewsets.ModelViewSet):
                         participant.refresh_from_db()
 
                         # Create Submission record for audit trail and future
-                        # idempotency checks.
+                        # idempotency checks. Scoped to the participant's own
+                        # event so the audit row never lands on another event's
+                        # challenge (ChallengeQuestion rows are many-to-many).
                         challenge_question = ChallengeQuestion.objects.filter(
-                            question=question
+                            question=question, challenge__in=allowed_challenges,
                         ).select_related("challenge").first()
                         if challenge_question:
                             Submission.objects.create(

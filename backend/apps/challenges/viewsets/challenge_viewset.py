@@ -1,10 +1,11 @@
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny
 from drf_spectacular.utils import extend_schema
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from apps.common.utils.response import success_response
 from apps.accounts.permissions.is_admin import IsAdmin
+from apps.challenges.permissions import IsAdminOrParticipant
 from apps.participants.auth.participant_auth import ParticipantTokenAuthentication
 from apps.participants.permissions.is_participant import IsParticipant
 from apps.challenges.models.challenge import Challenge
@@ -31,12 +32,16 @@ class ChallengeViewSet(viewsets.ModelViewSet):
     queryset = Challenge.objects.all()
     lookup_field = "slug"
     lookup_value_regex = "[^/]+"
-    authentication_classes = [ParticipantTokenAuthentication]
+    # Participant tokens authenticate students; JWTAuthentication is required so
+    # admin users (whose JWTs carry no participant_id claim) are not silently
+    # treated as anonymous on this viewset — it previously broke IsAdmin here.
+    authentication_classes = [ParticipantTokenAuthentication, JWTAuthentication]
 
     def get_permissions(self):
-        # Public browsing — anyone can list/retrieve challenges
+        # Hard gate: admins see everything, participants are scoped to their
+        # event (enforced in list/retrieve), everyone else gets 401.
         if self.action in ["list", "retrieve"]:
-            return [AllowAny()]
+            return [IsAdminOrParticipant()]
         # Student actions — require authentication
         if self.action in ["submit", "start", "save_progress", "progress", "evidence", "review", "reviews"]:
             return [IsParticipant()]
@@ -51,9 +56,29 @@ class ChallengeViewSet(viewsets.ModelViewSet):
         return ChallengeSerializer
 
     def get_queryset(self):
+        """
+        Event-scoped queryset. The DRF router calls get_queryset() for both
+        list and retrieve, so the participant-event scoping lives here to
+        close the cross-event leak on BOTH endpoints:
+
+        - participant: only challenges of their own event, falling back to the
+          event-less global set when their event has none linked (same
+          fallback the review endpoints have always used).
+        - admin (user JWT): the full set — admins manage all events.
+        - never reached anonymously: IsAdminOrParticipant 401s first.
+        """
         difficulty = self.request.query_params.get("difficulty")
         search_query = self.request.query_params.get("search")
-        return ChallengeSelector.filter_challenges(difficulty=difficulty, query=search_query)
+        queryset = ChallengeSelector.filter_challenges(difficulty=difficulty, query=search_query)
+
+        participant = getattr(self.request, "participant", None)
+        if not participant and self.request.user:
+            participant = getattr(self.request.user, "participant", None)
+
+        if participant is not None:
+            return queryset & self._challenges_for_participant(participant)
+
+        return queryset
 
     def _challenges_for_participant(self, participant):
         """
@@ -171,7 +196,9 @@ class ChallengeViewSet(viewsets.ModelViewSet):
         if not challenge:
             return success_response(message="Challenge not found.", status_code=status.HTTP_404_NOT_FOUND)
 
-        # Event verification check
+        # Event verification check: a participant may only open challenges
+        # from their own event. Anonymous callers never reach this point —
+        # IsAdminOrParticipant has already rejected them with 401.
         participant = getattr(request, "participant", None)
         if not participant and request.user:
             participant = getattr(request.user, "participant", None)

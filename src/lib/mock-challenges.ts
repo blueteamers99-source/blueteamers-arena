@@ -354,6 +354,12 @@ export async function fetchProgressApi(id: string): Promise<ChallengeProgressSta
 export async function fetchChallengesApi(): Promise<Challenge[]> {
   try {
     const res = await studentAuthFetch(`${API_BASE_URL}/challenges/`);
+    if (res.status === 401 || res.status === 403) {
+      // The server explicitly rejected our credentials. Never render mock
+      // challenges over a real auth rejection — surface the empty result and
+      // let studentAuthFetch's redirect-to-login flow take over.
+      return [];
+    }
     if (!res.ok) return CHALLENGES;
     const json: unknown = await res.json();
     const candidates: unknown = isRecord(json)
@@ -397,6 +403,11 @@ export async function fetchChallengeDetailApi(
   try {
     const res = await studentAuthFetch(`${API_BASE_URL}/challenges/${id}/`);
     if (res.status === 403) {
+      return { challenge: null, forbidden: true };
+    }
+    if (res.status === 401) {
+      // Explicit auth rejection: show nothing rather than mock content while
+      // studentAuthFetch handles the refresh/redirect cycle.
       return { challenge: null, forbidden: true };
     }
     if (!res.ok) return { challenge: CHALLENGES.find((c) => c.id === id) || null, forbidden: false };
