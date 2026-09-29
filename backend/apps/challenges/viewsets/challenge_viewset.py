@@ -18,6 +18,9 @@ from apps.challenges.serializers.student_challenge_serializer import (
 )
 from apps.participants.models.participant_progress import ParticipantProgress
 from apps.participants.services.progress_service import ProgressService
+from apps.challenges.models.challenge_question import ChallengeQuestion
+from apps.events.models.event import Event
+from apps.submissions.models.submission import Submission
 from apps.submissions.serializers.submission_serializer import (
     SubmissionSerializer,
     SubmitAnswersRequestSerializer,
@@ -51,6 +54,82 @@ class ChallengeViewSet(viewsets.ModelViewSet):
         difficulty = self.request.query_params.get("difficulty")
         search_query = self.request.query_params.get("search")
         return ChallengeSelector.filter_challenges(difficulty=difficulty, query=search_query)
+
+    def _challenges_for_participant(self, participant):
+        """
+        The challenges a participant is allowed to see, falling back to the
+        global (event-less) set when their event has none linked. Mirrors the
+        fallback the review endpoints have always used.
+        """
+        if participant.event_id:
+            challenges = Challenge.objects.filter(event_id=participant.event_id)
+            if challenges.exists():
+                return challenges
+        return Challenge.objects.filter(event__isnull=True)
+
+    def _withheld_question_ids(self, participant, submitted_challenge_ids) -> set:
+        """
+        Question ids whose answer key must stay hidden from this participant.
+
+        A key is withheld while the event is still Live if the same Question row
+        is attached to any challenge in the participant's event that they have
+        NOT submitted. Question rows are shared across challenges
+        (ChallengeQuestion is many-to-many), so without this a student could
+        submit one challenge, read its key off the review page, and paste it
+        into a later challenge that reuses the question.
+
+        Once the event is no longer Live the key is released for every
+        question, which is the entire purpose of the post-event review page.
+        """
+        event = getattr(participant, "event", None)
+        if event is not None and event.status != Event.StatusChoices.LIVE:
+            return set()
+
+        shared = ChallengeQuestion.objects.filter(
+            challenge__in=self._challenges_for_participant(participant),
+        ).exclude(challenge_id__in=set(submitted_challenge_ids))
+        # Normalised to str: _build_review_question compares against str(q.id).
+        return {str(question_id) for question_id in shared.values_list("question_id", flat=True)}
+
+    def _build_review_question(self, cq, submission, withheld_question_ids) -> dict:
+        """
+        One per-question review row.
+
+        correct_answer / correct_option_index / explanation are nulled out when
+        the question is shared with a challenge the participant has not
+        attempted yet. answer_key_released tells the UI which state it is in.
+        """
+        q = cq.question
+        student_answer = submission.answers_json.get(str(q.id))
+        if student_answer is None:
+            student_answer = submission.answers_json.get(f"q{cq.position}")
+
+        eval_result = None
+        for log in submission.evaluation_results:
+            if log.get("question_id") == str(q.id):
+                eval_result = log
+                break
+
+        released = str(q.id) not in withheld_question_ids
+
+        return {
+            "question_id": str(q.id),
+            "position": cq.position,
+            "question_text": q.question_text,
+            "category": q.category,
+            "difficulty": q.difficulty,
+            "kind": q.kind,
+            "options_json": q.options_json if q.kind == "mcq" else [],
+            "student_answer": student_answer,
+            "correct_answer": q.correct_answer if released else None,
+            "correct_option_index": (q.correct_option_index if q.kind == "mcq" else None) if released else None,
+            "explanation": q.explanation if released else None,
+            "answer_key_released": released,
+            "default_points": q.default_points,
+            "points_earned": eval_result.get("points_earned", 0) if eval_result else 0,
+            "is_correct": eval_result.get("is_correct", False) if eval_result else False,
+            "feedback_note": eval_result.get("feedback_note", "") if eval_result else "",
+        }
 
     def list(self, request, *args, **kwargs):
         """
@@ -280,7 +359,6 @@ class ChallengeViewSet(viewsets.ModelViewSet):
             return Response({"success": False, "message": "Forbidden. Cross-event access denied."}, status=status.HTTP_403_FORBIDDEN)
 
         # Get the submission for this challenge
-        from apps.submissions.models.submission import Submission
         submission = Submission.objects.filter(
             participant=participant,
             challenge=challenge,
@@ -289,44 +367,25 @@ class ChallengeViewSet(viewsets.ModelViewSet):
         if not submission:
             return Response({"success": False, "message": "No submission found for this challenge."}, status=status.HTTP_404_NOT_FOUND)
 
+        # Withhold keys for questions reused by a challenge they have not
+        # attempted yet — see _withheld_question_ids.
+        submitted_challenge_ids = set(
+            Submission.objects.filter(
+                participant=participant,
+                challenge__in=self._challenges_for_participant(participant),
+            ).values_list("challenge_id", flat=True)
+        )
+        withheld_question_ids = self._withheld_question_ids(participant, submitted_challenge_ids)
+
         # Get questions with their details
-        from apps.challenges.models.challenge_question import ChallengeQuestion
         challenge_questions = ChallengeQuestion.objects.filter(
             challenge=challenge
         ).select_related("question").order_by("position")
 
-        questions_data = []
-        for cq in challenge_questions:
-            q = cq.question
-            student_answer = submission.answers_json.get(str(q.id))
-            if student_answer is None:
-                student_answer = submission.answers_json.get(f"q{cq.position}")
-
-            # Find evaluation result for this question
-            eval_result = None
-            for log in submission.evaluation_results:
-                if log.get("question_id") == str(q.id):
-                    eval_result = log
-                    break
-
-            question_info = {
-                "question_id": str(q.id),
-                "position": cq.position,
-                "question_text": q.question_text,
-                "category": q.category,
-                "difficulty": q.difficulty,
-                "kind": q.kind,
-                "options_json": q.options_json if q.kind == "mcq" else [],
-                "student_answer": student_answer,
-                "correct_answer": q.correct_answer,
-                "correct_option_index": q.correct_option_index if q.kind == "mcq" else None,
-                "explanation": q.explanation,
-                "default_points": q.default_points,
-                "points_earned": eval_result.get("points_earned", 0) if eval_result else 0,
-                "is_correct": eval_result.get("is_correct", False) if eval_result else False,
-                "feedback_note": eval_result.get("feedback_note", "") if eval_result else "",
-            }
-            questions_data.append(question_info)
+        questions_data = [
+            self._build_review_question(cq, submission, withheld_question_ids)
+            for cq in challenge_questions
+        ]
 
         return Response({
             "success": True,
@@ -360,15 +419,7 @@ class ChallengeViewSet(viewsets.ModelViewSet):
 
         # Challenges for the participant's event, falling back to global
         # challenges when the event has none linked.
-        if participant.event_id:
-            challenges = list(Challenge.objects.filter(event_id=participant.event_id).order_by("challenge_number"))
-        else:
-            challenges = []
-        if not challenges:
-            challenges = list(Challenge.objects.filter(event__isnull=True).order_by("challenge_number"))
-
-        from apps.submissions.models.submission import Submission
-        from apps.challenges.models.challenge_question import ChallengeQuestion
+        challenges = list(self._challenges_for_participant(participant).order_by("challenge_number"))
 
         submissions = {
             str(s.challenge_id): s
@@ -377,6 +428,10 @@ class ChallengeViewSet(viewsets.ModelViewSet):
                 challenge__in=challenges,
             ).order_by("-submitted_at")
         }
+
+        withheld_question_ids = self._withheld_question_ids(
+            participant, {s.challenge_id for s in submissions.values()}
+        )
 
         challenge_reviews = []
         for challenge in challenges:
@@ -399,36 +454,10 @@ class ChallengeViewSet(viewsets.ModelViewSet):
                 challenge=challenge
             ).select_related("question").order_by("position")
 
-            questions_data = []
-            for cq in challenge_questions:
-                q = cq.question
-                student_answer = submission.answers_json.get(str(q.id))
-                if student_answer is None:
-                    student_answer = submission.answers_json.get(f"q{cq.position}")
-
-                eval_result = None
-                for log in submission.evaluation_results:
-                    if log.get("question_id") == str(q.id):
-                        eval_result = log
-                        break
-
-                questions_data.append({
-                    "question_id": str(q.id),
-                    "position": cq.position,
-                    "question_text": q.question_text,
-                    "category": q.category,
-                    "difficulty": q.difficulty,
-                    "kind": q.kind,
-                    "options_json": q.options_json if q.kind == "mcq" else [],
-                    "student_answer": student_answer,
-                    "correct_answer": q.correct_answer,
-                    "correct_option_index": q.correct_option_index if q.kind == "mcq" else None,
-                    "explanation": q.explanation,
-                    "default_points": q.default_points,
-                    "points_earned": eval_result.get("points_earned", 0) if eval_result else 0,
-                    "is_correct": eval_result.get("is_correct", False) if eval_result else False,
-                    "feedback_note": eval_result.get("feedback_note", "") if eval_result else "",
-                })
+            questions_data = [
+                self._build_review_question(cq, submission, withheld_question_ids)
+                for cq in challenge_questions
+            ]
 
             challenge_reviews.append({
                 "challenge_number": challenge.challenge_number,

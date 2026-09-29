@@ -39,9 +39,13 @@ interface QuestionReview {
   kind: string;
   options_json: string[];
   student_answer: string | number | null;
-  correct_answer: string;
+  correct_answer: string | null;
   correct_option_index: number | null;
   explanation: string | null;
+  // False while the event is still live and this question is reused by a
+  // challenge the student has not attempted yet — the key is withheld so it
+  // cannot be read off the review page and reused elsewhere.
+  answer_key_released: boolean;
   default_points: number;
   points_earned: number;
   is_correct: boolean;
@@ -297,6 +301,9 @@ function QuestionCard({ question }: { question: QuestionReview }) {
   const isCorrect = question.is_correct;
   // Partial credit: points were awarded but the answer wasn't a full match.
   const isPartial = !isCorrect && question.points_earned > 0;
+  // The server withholds the key while the event is live and this question is
+  // also used by a challenge the student has not attempted yet.
+  const keyWithheld = question.answer_key_released === false;
 
   const formatAnswer = (answer: string | number | null): string => {
     if (answer === null || answer === undefined) return "No answer";
@@ -385,9 +392,16 @@ function QuestionCard({ question }: { question: QuestionReview }) {
             <p className="text-xs font-medium text-muted-foreground mb-1">
               Correct Answer
             </p>
-            <p className="text-sm text-emerald-400">
-              {formatCorrectAnswer(question)}
-            </p>
+            {keyWithheld ? (
+              <p className="text-sm text-muted-foreground">
+                Hidden until this question can no longer be attempted. It
+                unlocks once the event ends.
+              </p>
+            ) : (
+              <p className="text-sm text-emerald-400">
+                {formatCorrectAnswer(question)}
+              </p>
+            )}
           </div>
         )}
 

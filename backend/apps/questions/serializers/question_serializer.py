@@ -1,5 +1,22 @@
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
+from apps.accounts.models.user import User
 from apps.questions.models.question import Question
+
+
+def request_carries_admin_credentials(request) -> bool:
+    """
+    True only for a real, authenticated staff user.
+
+    Fails closed: a missing request, an anonymous user, or a participant token
+    wrapper all return False, so the answer key is never serialised.
+    """
+    if request is None:
+        return False
+    user = getattr(request, "user", None)
+    if user is None or not getattr(user, "is_authenticated", False):
+        return False
+    return getattr(user, "role", None) in [User.RoleChoices.ADMIN, User.RoleChoices.SUPER_ADMIN]
 
 
 class AdminQuestionSerializer(serializers.ModelSerializer):
@@ -27,6 +44,19 @@ class AdminQuestionSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def to_representation(self, instance):
+        """
+        Last line of defence for the answer key.
+
+        The viewset already gates this serializer behind IsAdmin, but the
+        fields below are the whole competition. If this serializer is ever
+        wired to a route with weaker permissions, fail loudly here instead of
+        shipping correct_answer to an unauthorised caller.
+        """
+        if not request_carries_admin_credentials(self.context.get("request")):
+            raise PermissionDenied("The question answer key is restricted to admin users.")
+        return super().to_representation(instance)
 
     def validate_kind(self, value):
         if value:

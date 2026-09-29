@@ -1,7 +1,8 @@
+from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from apps.questions.viewsets.question_viewset import QuestionViewSet
+from apps.questions.viewsets import PublicQuestionViewSet
 
 router = DefaultRouter()
-router.register(r"questions", QuestionViewSet, basename="question")
+router.register(r"questions", PublicQuestionViewSet, basename="question")
 
 urlpatterns = router.urls
