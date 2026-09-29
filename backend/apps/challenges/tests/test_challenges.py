@@ -38,18 +38,120 @@ class ChallengesAPITests(TestCase):
         self.list_url = reverse("challenge-list")
         self.detail_url = reverse("challenge-detail", kwargs={"slug": "phishnet"})
 
-    def test_list_challenges(self):
+    def test_anonymous_list_is_401(self):
+        """No token — no challenge content. The pre-auth funnel is
+        enter-code -> register -> play, so anonymous browsing was removed."""
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_anonymous_detail_is_401(self):
+        """Anonymous callers must not read questions/evidence content."""
+        response = self.client.get(self.detail_url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_participant_list_is_scoped_to_their_event(self):
+        """A participant of event A must not see event B's challenges in the
+        list — closes the cross-event list leak."""
+        event_a = Event.objects.create(
+            college_name="CBIT", workshop_name="SOC A", event_code="EVA2026",
+            event_date=date(2026, 9, 1), status=Event.StatusChoices.LIVE,
+        )
+        event_b = Event.objects.create(
+            college_name="OTHER", workshop_name="SOC B", event_code="EVB2026",
+            event_date=date(2026, 9, 1), status=Event.StatusChoices.LIVE,
+        )
+        ch_a = Challenge.objects.create(
+            challenge_number=101, slug="ev-a-challenge", name="Challenge A",
+            description="d", brief="b", difficulty=Challenge.DifficultyChoices.EASY,
+            duration_minutes=10, points=50, event=event_a,
+        )
+        Challenge.objects.create(
+            challenge_number=102, slug="ev-b-secret", name="PROBE SECRET CHALLENGE B",
+            description="d", brief="b", difficulty=Challenge.DifficultyChoices.EASY,
+            duration_minutes=10, points=50, event=event_b,
+        )
+        participant = Participant.objects.create(event=event_a, name="P A", email="pa@cbit.ac.in")
+        token = SessionService.generate_participant_token(participant)
+
+        self.client.credentials(HTTP_X_PARTICIPANT_TOKEN=token)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = {c["name"] for c in response.data["results"]}
+        self.assertIn("Challenge A", names)
+        self.assertNotIn("PROBE SECRET CHALLENGE B", names)
+        self.assertTrue(all(c["slug"] != "ev-b-secret" for c in response.data["results"]))
+        self.assertIsNotNone(ch_a)
+
+    def test_participant_detail_cross_event_is_403(self):
+        """Direct slug access to another event's challenge is forbidden."""
+        event_b = Event.objects.create(
+            college_name="OTHER", workshop_name="SOC B", event_code="EVB2026",
+            event_date=date(2026, 9, 1), status=Event.StatusChoices.LIVE,
+        )
+        Challenge.objects.create(
+            challenge_number=103, slug="ev-b-secret", name="PROBE SECRET CHALLENGE B",
+            description="d", brief="b", difficulty=Challenge.DifficultyChoices.EASY,
+            duration_minutes=10, points=50, event=event_b,
+        )
+        event_a = Event.objects.create(
+            college_name="CBIT", workshop_name="SOC A", event_code="EVA2026",
+            event_date=date(2026, 9, 1), status=Event.StatusChoices.LIVE,
+        )
+        participant = Participant.objects.create(event=event_a, name="P A", email="pa@cbit.ac.in")
+        token = SessionService.generate_participant_token(participant)
+
+        self.client.credentials(HTTP_X_PARTICIPANT_TOKEN=token)
+        response = self.client.get(reverse("challenge-detail", kwargs={"slug": "ev-b-secret"}))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_participant_sees_eventless_challenges_when_event_has_none(self):
+        """Fallback parity with the review endpoints: an event with no linked
+        challenges still shows the global event-less set."""
+        event_a = Event.objects.create(
+            college_name="CBIT", workshop_name="SOC A", event_code="EVA2026",
+            event_date=date(2026, 9, 1), status=Event.StatusChoices.LIVE,
+        )
+        Participant.objects.create(event=event_a, name="P A", email="pa@cbit.ac.in")
+        token = SessionService.generate_participant_token(
+            Participant.objects.get(email="pa@cbit.ac.in")
+        )
+
+        self.client.credentials(HTTP_X_PARTICIPANT_TOKEN=token)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = {c["name"] for c in response.data["results"]}
+        self.assertIn("Operation PhishNet", names)  # the event-less setUp challenge
+
+    def test_admin_can_list_and_retrieve(self):
+        """Admin JWTs authenticate on this viewset and see all challenges
+        (this was silently broken before — the auth override hid JWT users)."""
+        admin = User.objects.create_user(email="admin@cbit.ac.in", role=User.RoleChoices.ADMIN)
+        admin.set_password("S3curePass!123")
+        admin.save()
+        from rest_framework_simplejwt.tokens import RefreshToken
+        jwt = str(RefreshToken.for_user(admin).access_token)
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {jwt}")
         response = self.client.get(self.list_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 1)
-        self.assertEqual(response.data["results"][0]["name"], "Operation PhishNet")
 
-    def test_get_challenge_detail_with_evidence(self):
-        response = self.client.get(self.detail_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["slug"], "phishnet")
-        self.assertEqual(len(response.data["evidence"]), 1)
-        self.assertEqual(response.data["evidence"][0]["artifact_key"], "headers")
+        detail = self.client.get(self.detail_url)
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail.data["slug"], "phishnet")
+
+    def test_user_token_student_without_participant_is_401(self):
+        """A plain user-token student (no participant record) gets 401 — the
+        strict posture agreed for this endpoint."""
+        student = User.objects.create_user(email="stu@cbit.ac.in", role=User.RoleChoices.STUDENT)
+        student.set_password("S3curePass!123")
+        student.save()
+        from rest_framework_simplejwt.tokens import RefreshToken
+        jwt = str(RefreshToken.for_user(student).access_token)
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {jwt}")
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 class AllReviewsAPITests(TestCase):
